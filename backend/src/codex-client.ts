@@ -151,117 +151,187 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
 
 /**
  * Process a single JSONL event from Codex CLI.
+ *
+ * Codex JSONL format:
+ *   { type: "event_msg", payload: { type: "agent_message" | "token_count" | "agent_reasoning" | ... } }
+ *   { type: "response_item", payload: { type: "message" | "function_call" | "function_call_output" | "reasoning" | ... } }
+ *   { type: "session_meta" | "turn_context", ... }
  */
 function processCodexEvent(sessionId: string, event: any): void {
-  const type = event.type;
+  const topType = event.type;
+  const payload = event.payload;
+  if (!payload) return;
 
-  if (type === "message" || type === "content_block") {
-    // Assistant text content
-    const text = event.text ?? event.content ?? "";
-    if (text) {
+  const payloadType = payload.type;
+
+  // ── event_msg events ──
+  if (topType === "event_msg") {
+    // Agent text response (streaming)
+    if (payloadType === "agent_message" && payload.message) {
       eventBus.emit({
         type: "agent:response",
         sessionId,
         timestamp: Date.now(),
-        content: text,
+        content: payload.message + "\n",
         partial: true,
       });
+      eventBus.emit({
+        type: "stage:change",
+        sessionId,
+        timestamp: Date.now(),
+        stage: "coding",
+        description: "Codex 응답 중...",
+      });
     }
 
-    eventBus.emit({
-      type: "stage:change",
-      sessionId,
-      timestamp: Date.now(),
-      stage: "coding",
-      description: "Codex 응답 중...",
-    });
+    // Agent reasoning
+    if (payloadType === "agent_reasoning" && payload.summary) {
+      eventBus.emit({
+        type: "agent:reasoning",
+        sessionId,
+        timestamp: Date.now(),
+        summary: payload.summary,
+        context: payload.context ?? "",
+      });
+    }
+
+    // Token count + rate limits
+    if (payloadType === "token_count") {
+      const info = payload.info;
+      const rateLimits = payload.rate_limits;
+
+      if (info?.total_token_usage) {
+        const usage = info.total_token_usage;
+        eventBus.emit({
+          type: "token:update",
+          sessionId,
+          timestamp: Date.now(),
+          inputTokens: usage.input_tokens ?? 0,
+          outputTokens: usage.output_tokens ?? 0,
+          cacheReadTokens: usage.cached_input_tokens ?? 0,
+          cacheWriteTokens: 0,
+          totalCostUsd: 0,
+          contextBudgetRemaining: info.model_context_window
+            ? 1 - (usage.total_tokens / info.model_context_window)
+            : -1,
+        });
+      }
+
+      if (rateLimits) {
+        eventBus.emit({
+          type: "codex:rate_limit",
+          sessionId,
+          timestamp: Date.now(),
+          primaryUsedPercent: rateLimits.primary?.used_percent ?? 0,
+          primaryWindowMinutes: rateLimits.primary?.window_minutes ?? 0,
+          primaryResetsAt: rateLimits.primary?.resets_at ?? 0,
+          secondaryUsedPercent: rateLimits.secondary?.used_percent ?? 0,
+          secondaryWindowMinutes: rateLimits.secondary?.window_minutes ?? 0,
+          secondaryResetsAt: rateLimits.secondary?.resets_at ?? 0,
+        });
+      }
+    }
   }
 
-  // Token count events (from event_msg wrapper or direct)
-  const payload = event.payload ?? event;
-  if (payload.type === "token_count") {
-    const info = payload.info;
-    const rateLimits = payload.rate_limits;
-
-    if (info?.total_token_usage) {
-      const usage = info.total_token_usage;
-      eventBus.emit({
-        type: "token:update",
-        sessionId,
-        timestamp: Date.now(),
-        inputTokens: usage.input_tokens ?? 0,
-        outputTokens: usage.output_tokens ?? 0,
-        cacheReadTokens: usage.cached_input_tokens ?? 0,
-        cacheWriteTokens: 0,
-        totalCostUsd: 0,
-        contextBudgetRemaining: info.model_context_window
-          ? 1 - (usage.total_tokens / info.model_context_window)
-          : -1,
-      });
+  // ── response_item events ──
+  if (topType === "response_item") {
+    // Text message content
+    if (payloadType === "message") {
+      const content = payload.content ?? [];
+      for (const part of content) {
+        if (part.type === "output_text" && part.text) {
+          eventBus.emit({
+            type: "agent:response",
+            sessionId,
+            timestamp: Date.now(),
+            content: part.text + "\n",
+            partial: true,
+          });
+          eventBus.emit({
+            type: "stage:change",
+            sessionId,
+            timestamp: Date.now(),
+            stage: "coding",
+            description: "Codex 응답 중...",
+          });
+        }
+      }
     }
 
-    if (rateLimits) {
+    // Function call (tool use)
+    if (payloadType === "function_call") {
+      const toolName = payload.name ?? "unknown";
+      let toolInput: Record<string, unknown> = {};
+      try {
+        toolInput = typeof payload.arguments === "string"
+          ? JSON.parse(payload.arguments)
+          : (payload.arguments ?? {});
+      } catch {
+        toolInput = { raw: payload.arguments };
+      }
+
       eventBus.emit({
-        type: "codex:rate_limit",
+        type: "tool:call",
         sessionId,
         timestamp: Date.now(),
-        primaryUsedPercent: rateLimits.primary?.used_percent ?? 0,
-        primaryWindowMinutes: rateLimits.primary?.window_minutes ?? 0,
-        primaryResetsAt: rateLimits.primary?.resets_at ?? 0,
-        secondaryUsedPercent: rateLimits.secondary?.used_percent ?? 0,
-        secondaryWindowMinutes: rateLimits.secondary?.window_minutes ?? 0,
-        secondaryResetsAt: rateLimits.secondary?.resets_at ?? 0,
+        toolName,
+        toolId: payload.call_id ?? uuid(),
+        parameters: toolInput,
       });
-    }
-  }
 
-  // Tool use events
-  if (type === "function_call" || (event.name && event.arguments)) {
-    const toolName = event.name ?? event.function?.name ?? "unknown";
-    const toolInput = event.arguments ?? event.input ?? {};
-
-    eventBus.emit({
-      type: "tool:call",
-      sessionId,
-      timestamp: Date.now(),
-      toolName,
-      toolId: event.id ?? uuid(),
-      parameters: typeof toolInput === "string" ? JSON.parse(toolInput) : toolInput,
-    });
-
-    // Map to file events
-    if (toolName === "write" || toolName === "create_file") {
-      const params = typeof toolInput === "string" ? JSON.parse(toolInput) : toolInput;
       eventBus.emit({
-        type: "file:write",
+        type: "stage:change",
         sessionId,
         timestamp: Date.now(),
-        filePath: String(params.path ?? params.file_path ?? ""),
-        content: String(params.content ?? params.contents ?? ""),
+        stage: "coding",
+        description: `도구 실행: ${toolName}`,
       });
+
+      // Map shell commands
+      if (toolName === "shell_command" || toolName === "shell" || toolName === "bash") {
+        const cmdId = uuid();
+        eventBus.emit({
+          type: "command:execute",
+          sessionId,
+          timestamp: Date.now(),
+          command: String(toolInput.command ?? toolInput.cmd ?? ""),
+          commandId: cmdId,
+        });
+      }
+
+      // Map file writes
+      if (toolName === "write" || toolName === "create_file") {
+        eventBus.emit({
+          type: "file:write",
+          sessionId,
+          timestamp: Date.now(),
+          filePath: String(toolInput.path ?? toolInput.file_path ?? ""),
+          content: String(toolInput.content ?? toolInput.contents ?? ""),
+        });
+      }
+
+      // Map file edits
+      if (toolName === "edit" || toolName === "apply_diff" || toolName === "replace") {
+        eventBus.emit({
+          type: "file:edit",
+          sessionId,
+          timestamp: Date.now(),
+          filePath: String(toolInput.path ?? toolInput.file_path ?? ""),
+          oldString: String(toolInput.old_string ?? toolInput.search ?? ""),
+          newString: String(toolInput.new_string ?? toolInput.replace ?? ""),
+        });
+      }
     }
 
-    if (toolName === "edit" || toolName === "apply_diff" || toolName === "replace") {
-      const params = typeof toolInput === "string" ? JSON.parse(toolInput) : toolInput;
+    // Custom tool call (MCP etc.)
+    if (payloadType === "custom_tool_call") {
       eventBus.emit({
-        type: "file:edit",
+        type: "tool:call",
         sessionId,
         timestamp: Date.now(),
-        filePath: String(params.path ?? params.file_path ?? ""),
-        oldString: String(params.old_string ?? params.search ?? ""),
-        newString: String(params.new_string ?? params.replace ?? ""),
-      });
-    }
-
-    if (toolName === "shell" || toolName === "bash" || toolName === "run_command") {
-      const params = typeof toolInput === "string" ? JSON.parse(toolInput) : toolInput;
-      const cmdId = uuid();
-      eventBus.emit({
-        type: "command:execute",
-        sessionId,
-        timestamp: Date.now(),
-        command: String(params.command ?? params.cmd ?? ""),
-        commandId: cmdId,
+        toolName: payload.name ?? "custom_tool",
+        toolId: payload.call_id ?? uuid(),
+        parameters: payload.arguments ?? {},
       });
     }
   }
