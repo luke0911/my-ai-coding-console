@@ -17,6 +17,7 @@ export function PromptInput({ send }: PromptInputProps) {
     s.activeConsoleId ? s.sessionData[s.activeConsoleId] : null
   );
   const model = useSessionStore((s) => s.model);
+  const provider = useSessionStore((s) => s.provider);
   const updateSessionData = useSessionStore((s) => s.updateSessionData);
 
   const stage = activeData?.stage ?? "idle";
@@ -39,9 +40,10 @@ export function PromptInput({ send }: PromptInputProps) {
       prompt: trimmed,
       workspacePath,
       model,
+      provider,
     });
     setPrompt("");
-  }, [prompt, connected, isRunning, noWorkspace, activeConsoleId, workspacePath, model, send, updateSessionData]);
+  }, [prompt, connected, isRunning, noWorkspace, activeConsoleId, workspacePath, model, provider, send, updateSessionData]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // isComposing: 한국어/일본어/중국어 IME 조합 중에는 Enter를 무시
@@ -82,11 +84,14 @@ export function PromptInput({ send }: PromptInputProps) {
         <span>
           작업 폴더: <span className={noWorkspace ? "text-accent-orange" : "text-gray-500"}>{workspacePath || "선택되지 않음"}</span>
         </span>
-        {activeConsoleId && !activeConsoleId.startsWith("new-") && (
-          <span>
-            세션: <span className="text-gray-500">{activeConsoleId.slice(0, 8)}</span>
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">{provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : "Aider"}</span>
+          {activeConsoleId && !activeConsoleId.startsWith("new-") && (
+            <span>
+              세션: <span className="text-gray-500">{activeConsoleId.slice(0, 8)}</span>
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -110,6 +110,7 @@ async function runCLISession(
       sessionId,
       workspacePath,
       model: selectedModel,
+      provider: "claude",
       timestamp: Date.now(),
     });
     await hookManager.run(sessionId, "post", "session_create", { sessionId, workspacePath });

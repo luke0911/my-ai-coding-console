@@ -30,9 +30,16 @@ export function useWebSocket() {
 
       // ── Global events (no session routing) ──
       switch (type) {
-        case "connection:established":
-          s.setMockMode(!!(event as any).mockMode);
+        case "connection:established": {
+          const ce = event as any;
+          s.setMockMode(!!ce.mockMode);
+          s.setProviderAvailability({
+            claude: !!ce.claudeAvailable,
+            codex: !!ce.codexAvailable,
+            aider: !!ce.aiderAvailable,
+          });
           return;
+        }
 
         case "apikey:status":
           s.setMockMode(!!(event as any).mockMode);

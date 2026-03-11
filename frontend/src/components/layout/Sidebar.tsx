@@ -4,8 +4,14 @@ import { useState } from "react";
 import { useSessionStore } from "@/store/session-store";
 import { TokenDashboard } from "@/components/tokens/TokenDashboard";
 import { formatTime, truncatePath } from "@/lib/utils";
-import { CLAUDE_MODELS } from "@my-ai-console/shared";
-import type { ClientMessage, ClaudeModel } from "@my-ai-console/shared";
+import { PROVIDER_MODELS } from "@my-ai-console/shared";
+import type { ClientMessage, CodingProvider } from "@my-ai-console/shared";
+
+const PROVIDER_LABELS: Record<CodingProvider, string> = {
+  claude: "Claude Code",
+  codex: "OpenAI Codex",
+  aider: "Aider",
+};
 
 const STAGE_COLORS: Record<string, string> = {
   idle: "text-gray-500",
@@ -44,6 +50,9 @@ export function Sidebar({ send }: SidebarProps) {
   const updateSessionData = useSessionStore((s) => s.updateSessionData);
   const model = useSessionStore((s) => s.model);
   const setModel = useSessionStore((s) => s.setModel);
+  const provider = useSessionStore((s) => s.provider);
+  const setProvider = useSessionStore((s) => s.setProvider);
+  const providerAvailability = useSessionStore((s) => s.providerAvailability);
   const approvalConfig = useSessionStore((s) => s.approvalConfig);
 
   const stage = activeData?.stage ?? "idle";
@@ -56,15 +65,50 @@ export function Sidebar({ send }: SidebarProps) {
       {/* Auth status */}
       <AuthSection send={send} mockMode={mockMode} />
 
-      {/* Model & workspace */}
+      {/* Provider, Model & workspace */}
       <div className="p-3 border-b border-panel-border">
+        <div className="text-xs text-gray-500 mb-1">프로바이더</div>
+        <div className="flex gap-1 mb-2">
+          {(["claude", "codex", "aider"] as CodingProvider[]).map((p) => {
+            const available = providerAvailability[p];
+            const active = provider === p;
+            return (
+              <button
+                key={p}
+                onClick={() => {
+                  setProvider(p);
+                  // Auto-select first model for this provider
+                  const firstModel = PROVIDER_MODELS.find((m) => m.provider === p);
+                  if (firstModel) setModel(firstModel.id);
+                  // Also update active session's provider
+                  if (activeConsoleId) {
+                    updateSessionData(activeConsoleId, () => ({ provider: p }));
+                  }
+                }}
+                disabled={!available}
+                className={`flex-1 text-[10px] px-1.5 py-1 rounded transition-colors ${
+                  active
+                    ? "bg-accent-blue/20 text-accent-blue border border-accent-blue/40"
+                    : available
+                      ? "bg-panel-bg text-gray-500 border border-panel-border hover:text-gray-300 hover:border-gray-600"
+                      : "bg-panel-bg text-gray-700 border border-panel-border cursor-not-allowed opacity-50"
+                }`}
+                title={available ? PROVIDER_LABELS[p] : `${PROVIDER_LABELS[p]} (미설치)`}
+              >
+                {p === "claude" ? "Claude" : p === "codex" ? "Codex" : "Aider"}
+                {!available && <span className="ml-0.5 text-accent-orange">!</span>}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="text-xs text-gray-500 mb-1">모델</div>
         <select
           value={model}
-          onChange={(e) => setModel(e.target.value as ClaudeModel)}
+          onChange={(e) => setModel(e.target.value)}
           className="w-full text-xs bg-panel-bg border border-panel-border rounded px-2 py-1.5 text-accent-blue font-medium focus:border-accent-blue focus:outline-none cursor-pointer appearance-none"
         >
-          {CLAUDE_MODELS.map((m) => (
+          {PROVIDER_MODELS.filter((m) => m.provider === provider).map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}
             </option>

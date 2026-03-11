@@ -18,6 +18,8 @@ import {
   listSessions,
   resumeSession,
 } from "./session-manager.js";
+import { isCodexAvailable } from "./codex-client.js";
+import { isAiderAvailable } from "./aider-client.js";
 import { dailyStats } from "./daily-stats.js";
 import { checkRateLimit } from "./rate-limit-checker.js";
 
@@ -90,14 +92,19 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
       clients.delete(client);
     });
 
-    // Send initial connection acknowledgment
-    const cliAvailable = isClaudeCliAvailable();
+    // Send initial connection acknowledgment with per-provider availability
+    const claudeAvailable = isClaudeCliAvailable();
+    const codexAvailable = isCodexAvailable();
+    const aiderAvailable = isAiderAvailable();
     ws.send(
       JSON.stringify({
         type: "connection:established",
         timestamp: Date.now(),
-        mockMode: !cliAvailable,
-        cliAvailable,
+        mockMode: !claudeAvailable,
+        cliAvailable: claudeAvailable,
+        claudeAvailable,
+        codexAvailable,
+        aiderAvailable,
       })
     );
 
@@ -119,12 +126,13 @@ async function handleClientMessage(
 ): Promise<void> {
   switch (msg.type) {
     case "prompt:send": {
-      console.log(`[WS] Prompt received: "${msg.prompt.substring(0, 50)}..." (model: ${msg.model})`);
+      console.log(`[WS] Prompt received: "${msg.prompt.substring(0, 50)}..." (provider: ${msg.provider}, model: ${msg.model})`);
       const sessionId = await createSession(
         msg.prompt,
         msg.workspacePath,
         msg.model,
-        msg.sessionId
+        msg.sessionId,
+        msg.provider
       );
       ws.send(
         JSON.stringify({

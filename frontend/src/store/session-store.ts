@@ -18,6 +18,7 @@ import type {
   DiffHunk,
   ApprovalConfig,
   ClaudeModel,
+  CodingProvider,
 } from "@my-ai-console/shared";
 
 // ─── Per-session data types ─────────────────────────────────────
@@ -85,6 +86,7 @@ interface CommandState {
 // ─── Per-session data bucket ────────────────────────────────────
 
 export interface PerSessionData {
+  provider: CodingProvider;
   workspacePath: string;
   responseText: string;
   responseStreaming: boolean;
@@ -121,6 +123,7 @@ export interface PerSessionData {
 
 export function createEmptySessionData(workspacePath = ""): PerSessionData {
   return {
+    provider: "claude" as CodingProvider,
     workspacePath,
     responseText: "",
     responseStreaming: false,
@@ -185,8 +188,10 @@ export interface SessionStore {
   currentSessionId: string | null;
 
   // Global settings
-  model: ClaudeModel;
-  setModel: (model: ClaudeModel) => void;
+  provider: CodingProvider;
+  setProvider: (provider: CodingProvider) => void;
+  model: string;
+  setModel: (model: string) => void;
   approvalConfig: ApprovalConfig;
   setApprovalConfig: (config: ApprovalConfig) => void;
 
@@ -199,6 +204,10 @@ export interface SessionStore {
   setAccountUsage: (usage: AccountUsageState) => void;
   usageRefreshRequest: number;
   requestUsageRefresh: () => void;
+
+  // Provider availability (from backend CLI checks)
+  providerAvailability: { claude: boolean; codex: boolean; aider: boolean };
+  setProviderAvailability: (avail: { claude: boolean; codex: boolean; aider: boolean }) => void;
 
   // UI
   selectedPanel: "stream" | "diff" | "file" | "usage";
@@ -304,6 +313,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }),
 
   // Global settings
+  provider: "claude",
+  setProvider: (provider) => set({ provider }),
   model: "claude-sonnet-4-5-20250929",
   setModel: (model) => set({ model }),
 
@@ -337,6 +348,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   usageRefreshRequest: 0,
   requestUsageRefresh: () =>
     set((s) => ({ usageRefreshRequest: s.usageRefreshRequest + 1 })),
+
+  // Provider availability
+  providerAvailability: { claude: false, codex: false, aider: false },
+  setProviderAvailability: (avail) => set({ providerAvailability: avail }),
 
   // UI
   selectedPanel: "stream",

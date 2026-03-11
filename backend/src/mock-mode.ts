@@ -65,6 +65,7 @@ export async function runMockSession(
     sessionId,
     workspacePath,
     model,
+    provider: "claude",
     timestamp: Date.now(),
   });
   await hookManager.run(sessionId, "post", "session_create", { sessionId, workspacePath });

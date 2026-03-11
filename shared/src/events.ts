@@ -13,6 +13,7 @@ export interface SessionCreatedEvent {
   sessionId: string;
   workspacePath: string;
   model: string;
+  provider: CodingProvider;
   timestamp: number;
 }
 
@@ -305,6 +306,8 @@ export type ServerEventType = ServerEvent["type"];
 
 // ─── Client → Server messages ───────────────────────────────────
 
+export type CodingProvider = "claude" | "codex" | "aider";
+
 export type ClaudeModel =
   | "claude-opus-4-6"
   | "claude-sonnet-4-5-20250929"
@@ -316,12 +319,33 @@ export const CLAUDE_MODELS: { id: ClaudeModel; label: string }[] = [
   { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ];
 
+export interface ProviderModel {
+  id: string;
+  label: string;
+  provider: CodingProvider;
+}
+
+export const PROVIDER_MODELS: ProviderModel[] = [
+  // Claude
+  { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5", provider: "claude" },
+  { id: "claude-opus-4-6", label: "Claude Opus 4.6", provider: "claude" },
+  { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", provider: "claude" },
+  // Codex (OpenAI)
+  { id: "o4-mini", label: "GPT o4-mini", provider: "codex" },
+  { id: "o3", label: "GPT o3", provider: "codex" },
+  // Aider (multi-model)
+  { id: "gpt-4o", label: "GPT-4o (Aider)", provider: "aider" },
+  { id: "gemini/gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "aider" },
+  { id: "deepseek/deepseek-chat", label: "DeepSeek Chat", provider: "aider" },
+];
+
 export interface PromptSendMessage {
   type: "prompt:send";
   sessionId?: string;
   prompt: string;
   workspacePath: string;
-  model: ClaudeModel;
+  model: string;
+  provider: CodingProvider;
 }
 
 export interface ApprovalRespondMessage {
