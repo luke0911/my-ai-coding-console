@@ -206,8 +206,8 @@ export interface SessionStore {
   requestUsageRefresh: () => void;
 
   // Provider availability (from backend CLI checks)
-  providerAvailability: { claude: boolean; codex: boolean; aider: boolean };
-  setProviderAvailability: (avail: { claude: boolean; codex: boolean; aider: boolean }) => void;
+  providerAvailability: { claude: boolean; codex: boolean };
+  setProviderAvailability: (avail: { claude: boolean; codex: boolean }) => void;
 
   // UI
   selectedPanel: "stream" | "diff" | "file" | "usage";
@@ -350,7 +350,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set((s) => ({ usageRefreshRequest: s.usageRefreshRequest + 1 })),
 
   // Provider availability
-  providerAvailability: { claude: false, codex: false, aider: false },
+  providerAvailability: { claude: false, codex: false },
   setProviderAvailability: (avail) => set({ providerAvailability: avail }),
 
   // UI

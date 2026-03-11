@@ -36,7 +36,6 @@ export function useWebSocket() {
           s.setProviderAvailability({
             claude: !!ce.claudeAvailable,
             codex: !!ce.codexAvailable,
-            aider: !!ce.aiderAvailable,
           });
           return;
         }

@@ -85,7 +85,7 @@ export function PromptInput({ send }: PromptInputProps) {
           작업 폴더: <span className={noWorkspace ? "text-accent-orange" : "text-gray-500"}>{workspacePath || "선택되지 않음"}</span>
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-gray-500">{provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : "Aider"}</span>
+          <span className="text-gray-500">{provider === "claude" ? "Claude" : "Codex"}</span>
           {activeConsoleId && !activeConsoleId.startsWith("new-") && (
             <span>
               세션: <span className="text-gray-500">{activeConsoleId.slice(0, 8)}</span>

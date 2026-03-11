@@ -20,7 +20,6 @@ import type { CodingProvider } from "@my-ai-console/shared";
 import { eventBus } from "./event-bus.js";
 import { runClaudeSession, getCliSessionId } from "./claude-client.js";
 import { runCodexSession } from "./codex-client.js";
-import { runAiderSession } from "./aider-client.js";
 
 interface SessionState {
   info: SessionInfo;
@@ -239,8 +238,6 @@ export async function createSession(
     switch (provider) {
       case "codex":
         return runCodexSession({ sessionId, prompt, workspacePath, model });
-      case "aider":
-        return runAiderSession({ sessionId, prompt, workspacePath, model });
       case "claude":
       default:
         return runClaudeSession({ sessionId, prompt, workspacePath, model });

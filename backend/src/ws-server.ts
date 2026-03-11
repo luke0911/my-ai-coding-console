@@ -19,7 +19,6 @@ import {
   resumeSession,
 } from "./session-manager.js";
 import { isCodexAvailable } from "./codex-client.js";
-import { isAiderAvailable } from "./aider-client.js";
 import { dailyStats } from "./daily-stats.js";
 import { checkRateLimit } from "./rate-limit-checker.js";
 
@@ -95,7 +94,6 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
     // Send initial connection acknowledgment with per-provider availability
     const claudeAvailable = isClaudeCliAvailable();
     const codexAvailable = isCodexAvailable();
-    const aiderAvailable = isAiderAvailable();
     ws.send(
       JSON.stringify({
         type: "connection:established",
@@ -104,7 +102,6 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
         cliAvailable: claudeAvailable,
         claudeAvailable,
         codexAvailable,
-        aiderAvailable,
       })
     );
 

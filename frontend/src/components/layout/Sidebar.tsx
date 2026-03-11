@@ -10,7 +10,6 @@ import type { ClientMessage, CodingProvider } from "@my-ai-console/shared";
 const PROVIDER_LABELS: Record<CodingProvider, string> = {
   claude: "Claude Code",
   codex: "OpenAI Codex",
-  aider: "Aider",
 };
 
 const STAGE_COLORS: Record<string, string> = {
@@ -69,7 +68,7 @@ export function Sidebar({ send }: SidebarProps) {
       <div className="p-3 border-b border-panel-border">
         <div className="text-xs text-gray-500 mb-1">프로바이더</div>
         <div className="flex gap-1 mb-2">
-          {(["claude", "codex", "aider"] as CodingProvider[]).map((p) => {
+          {(["claude", "codex"] as CodingProvider[]).map((p) => {
             const available = providerAvailability[p];
             const active = provider === p;
             return (
@@ -95,7 +94,7 @@ export function Sidebar({ send }: SidebarProps) {
                 }`}
                 title={available ? PROVIDER_LABELS[p] : `${PROVIDER_LABELS[p]} (미설치)`}
               >
-                {p === "claude" ? "Claude" : p === "codex" ? "Codex" : "Aider"}
+                {p === "claude" ? "Claude" : "Codex"}
                 {!available && <span className="ml-0.5 text-accent-orange">!</span>}
               </button>
             );

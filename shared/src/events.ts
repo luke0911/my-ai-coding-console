@@ -306,7 +306,7 @@ export type ServerEventType = ServerEvent["type"];
 
 // ─── Client → Server messages ───────────────────────────────────
 
-export type CodingProvider = "claude" | "codex" | "aider";
+export type CodingProvider = "claude" | "codex";
 
 export type ClaudeModel =
   | "claude-opus-4-6"
@@ -333,10 +333,6 @@ export const PROVIDER_MODELS: ProviderModel[] = [
   // Codex (OpenAI)
   { id: "o4-mini", label: "GPT o4-mini", provider: "codex" },
   { id: "o3", label: "GPT o3", provider: "codex" },
-  // Aider (multi-model)
-  { id: "gpt-4o", label: "GPT-4o (Aider)", provider: "aider" },
-  { id: "gemini/gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "aider" },
-  { id: "deepseek/deepseek-chat", label: "DeepSeek Chat", provider: "aider" },
 ];
 
 export interface PromptSendMessage {
