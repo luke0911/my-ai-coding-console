@@ -1,0 +1,26 @@
+{
+  "name": "my-ai-coding-console",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend"
+  ],
+  "main": "electron/main.cjs",
+  "scripts": {
+    "app": "electron .",
+    "app:build": "npm run build:shared && npm run build -w frontend && electron .",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build -w shared && npm run build -w backend && npm run build -w frontend",
+    "build:shared": "npm run build -w shared"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.8.1",
+    "typescript": "^5.5.0"
+  }
+}
