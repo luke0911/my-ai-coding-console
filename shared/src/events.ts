@@ -220,6 +220,18 @@ export interface QuotaUpdateEvent {
   rateLimitRequestsRemaining: number;
 }
 
+export interface CodexRateLimitEvent {
+  type: "codex:rate_limit";
+  sessionId: string;
+  timestamp: number;
+  primaryUsedPercent: number;
+  primaryWindowMinutes: number;
+  primaryResetsAt: number;
+  secondaryUsedPercent: number;
+  secondaryWindowMinutes: number;
+  secondaryResetsAt: number;
+}
+
 // ─── Approval system ───────────────────────────────────────────
 
 export interface ApprovalRequestEvent {
@@ -300,7 +312,8 @@ export type ServerEvent =
   | ApprovalRequestEvent
   | ApprovalResponseEvent
   | HookEvent
-  | StageChangeEvent;
+  | StageChangeEvent
+  | CodexRateLimitEvent;
 
 export type ServerEventType = ServerEvent["type"];
 

@@ -406,6 +406,17 @@ export function useWebSocket() {
           break;
         }
 
+        case "codex:rate_limit": {
+          const e = event as any;
+          s.setCodexRateLimit({
+            primaryUsedPercent: e.primaryUsedPercent,
+            primaryResetsAt: e.primaryResetsAt,
+            secondaryUsedPercent: e.secondaryUsedPercent,
+            secondaryResetsAt: e.secondaryResetsAt,
+          });
+          break;
+        }
+
         case "hook:event": {
           const e = event as ServerEvent & { type: "hook:event" };
           s.updateSessionData(sessionId, (data) => ({

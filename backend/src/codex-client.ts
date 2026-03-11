@@ -176,6 +176,44 @@ function processCodexEvent(sessionId: string, event: any): void {
     });
   }
 
+  // Token count events (from event_msg wrapper or direct)
+  const payload = event.payload ?? event;
+  if (payload.type === "token_count") {
+    const info = payload.info;
+    const rateLimits = payload.rate_limits;
+
+    if (info?.total_token_usage) {
+      const usage = info.total_token_usage;
+      eventBus.emit({
+        type: "token:update",
+        sessionId,
+        timestamp: Date.now(),
+        inputTokens: usage.input_tokens ?? 0,
+        outputTokens: usage.output_tokens ?? 0,
+        cacheReadTokens: usage.cached_input_tokens ?? 0,
+        cacheWriteTokens: 0,
+        totalCostUsd: 0,
+        contextBudgetRemaining: info.model_context_window
+          ? 1 - (usage.total_tokens / info.model_context_window)
+          : -1,
+      });
+    }
+
+    if (rateLimits) {
+      eventBus.emit({
+        type: "codex:rate_limit",
+        sessionId,
+        timestamp: Date.now(),
+        primaryUsedPercent: rateLimits.primary?.used_percent ?? 0,
+        primaryWindowMinutes: rateLimits.primary?.window_minutes ?? 0,
+        primaryResetsAt: rateLimits.primary?.resets_at ?? 0,
+        secondaryUsedPercent: rateLimits.secondary?.used_percent ?? 0,
+        secondaryWindowMinutes: rateLimits.secondary?.window_minutes ?? 0,
+        secondaryResetsAt: rateLimits.secondary?.resets_at ?? 0,
+      });
+    }
+  }
+
   // Tool use events
   if (type === "function_call" || (event.name && event.arguments)) {
     const toolName = event.name ?? event.function?.name ?? "unknown";

@@ -209,6 +209,20 @@ export interface SessionStore {
   providerAvailability: { claude: boolean; codex: boolean };
   setProviderAvailability: (avail: { claude: boolean; codex: boolean }) => void;
 
+  // Codex rate limit (from codex:rate_limit events)
+  codexRateLimit: {
+    primaryUsedPercent: number;
+    primaryResetsAt: number;
+    secondaryUsedPercent: number;
+    secondaryResetsAt: number;
+  };
+  setCodexRateLimit: (rl: {
+    primaryUsedPercent: number;
+    primaryResetsAt: number;
+    secondaryUsedPercent: number;
+    secondaryResetsAt: number;
+  }) => void;
+
   // UI
   selectedPanel: "stream" | "diff" | "file" | "usage";
   setSelectedPanel: (panel: "stream" | "diff" | "file" | "usage") => void;
@@ -352,6 +366,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   // Provider availability
   providerAvailability: { claude: false, codex: false },
   setProviderAvailability: (avail) => set({ providerAvailability: avail }),
+
+  // Codex rate limit
+  codexRateLimit: {
+    primaryUsedPercent: 0,
+    primaryResetsAt: 0,
+    secondaryUsedPercent: 0,
+    secondaryResetsAt: 0,
+  },
+  setCodexRateLimit: (rl) => set({ codexRateLimit: rl }),
 
   // UI
   selectedPanel: "stream",
