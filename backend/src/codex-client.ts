@@ -55,6 +55,7 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
     "exec",
     "--json",
     "--full-auto",
+    "--skip-git-repo-check",
     "--model", selectedModel,
     fullPrompt,
   ];
