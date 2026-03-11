@@ -84,9 +84,11 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
         if (!trimmed) continue;
         try {
           const event = JSON.parse(trimmed);
+          console.log(`[Codex:stdout] type=${event.type} payload.type=${event.payload?.type ?? "N/A"}`);
           processCodexEvent(sessionId, event);
         } catch {
           // Non-JSON line — treat as response text
+          console.log(`[Codex:stdout:text] ${trimmed.slice(0, 120)}`);
           eventBus.emit({
             type: "agent:response",
             sessionId,
@@ -150,29 +152,41 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
 }
 
 /**
- * Process a single JSONL event from Codex CLI.
+ * Process a single JSONL event from `codex exec --json` stdout.
  *
- * Codex JSONL format:
- *   { type: "event_msg", payload: { type: "agent_message" | "token_count" | "agent_reasoning" | ... } }
- *   { type: "response_item", payload: { type: "message" | "function_call" | "function_call_output" | "reasoning" | ... } }
- *   { type: "session_meta" | "turn_context", ... }
+ * Actual stdout format:
+ *   { type: "thread.started", thread_id: "..." }
+ *   { type: "turn.started" }
+ *   { type: "item.started", item: { id, type, ... } }
+ *   { type: "item.completed", item: { id, type: "agent_message" | "command_execution" | "file_change", ... } }
+ *   { type: "turn.completed", usage: { input_tokens, cached_input_tokens, output_tokens } }
  */
 function processCodexEvent(sessionId: string, event: any): void {
-  const topType = event.type;
-  const payload = event.payload;
-  if (!payload) return;
+  const type = event.type;
 
-  const payloadType = payload.type;
+  // ── Turn started: agent is thinking ──
+  if (type === "turn.started") {
+    eventBus.emit({
+      type: "stage:change",
+      sessionId,
+      timestamp: Date.now(),
+      stage: "thinking",
+      description: "Codex 생각 중...",
+    });
+  }
 
-  // ── event_msg events ──
-  if (topType === "event_msg") {
-    // Agent text response (streaming)
-    if (payloadType === "agent_message" && payload.message) {
+  // ── Item events (started / completed) ──
+  if (type === "item.started" || type === "item.completed") {
+    const item = event.item;
+    if (!item) return;
+
+    // Agent text response
+    if (item.type === "agent_message" && item.text) {
       eventBus.emit({
         type: "agent:response",
         sessionId,
         timestamp: Date.now(),
-        content: payload.message + "\n",
+        content: item.text + "\n",
         partial: true,
       });
       eventBus.emit({
@@ -184,156 +198,84 @@ function processCodexEvent(sessionId: string, event: any): void {
       });
     }
 
-    // Agent reasoning
-    if (payloadType === "agent_reasoning" && payload.summary) {
-      eventBus.emit({
-        type: "agent:reasoning",
-        sessionId,
-        timestamp: Date.now(),
-        summary: payload.summary,
-        context: payload.context ?? "",
-      });
-    }
-
-    // Token count + rate limits
-    if (payloadType === "token_count") {
-      const info = payload.info;
-      const rateLimits = payload.rate_limits;
-
-      if (info?.total_token_usage) {
-        const usage = info.total_token_usage;
+    // Command execution
+    if (item.type === "command_execution") {
+      const cmdId = item.id ?? uuid();
+      if (type === "item.started") {
         eventBus.emit({
-          type: "token:update",
+          type: "tool:call",
           sessionId,
           timestamp: Date.now(),
-          inputTokens: usage.input_tokens ?? 0,
-          outputTokens: usage.output_tokens ?? 0,
-          cacheReadTokens: usage.cached_input_tokens ?? 0,
-          cacheWriteTokens: 0,
-          totalCostUsd: 0,
-          contextBudgetRemaining: info.model_context_window
-            ? 1 - (usage.total_tokens / info.model_context_window)
-            : -1,
+          toolName: "shell_command",
+          toolId: cmdId,
+          parameters: { command: item.command ?? "" },
         });
-      }
-
-      if (rateLimits) {
         eventBus.emit({
-          type: "codex:rate_limit",
+          type: "command:execute",
           sessionId,
           timestamp: Date.now(),
-          primaryUsedPercent: rateLimits.primary?.used_percent ?? 0,
-          primaryWindowMinutes: rateLimits.primary?.window_minutes ?? 0,
-          primaryResetsAt: rateLimits.primary?.resets_at ?? 0,
-          secondaryUsedPercent: rateLimits.secondary?.used_percent ?? 0,
-          secondaryWindowMinutes: rateLimits.secondary?.window_minutes ?? 0,
-          secondaryResetsAt: rateLimits.secondary?.resets_at ?? 0,
+          command: item.command ?? "",
+          commandId: cmdId,
+        });
+        eventBus.emit({
+          type: "stage:change",
+          sessionId,
+          timestamp: Date.now(),
+          stage: "coding",
+          description: `명령 실행 중...`,
         });
       }
-    }
-  }
-
-  // ── response_item events ──
-  if (topType === "response_item") {
-    // Text message content
-    if (payloadType === "message") {
-      const content = payload.content ?? [];
-      for (const part of content) {
-        if (part.type === "output_text" && part.text) {
+      if (type === "item.completed" && item.aggregated_output) {
+        eventBus.emit({
+          type: "command:output",
+          sessionId,
+          timestamp: Date.now(),
+          commandId: cmdId,
+          output: item.aggregated_output,
+          stream: "stdout",
+        });
+        if (item.exit_code != null) {
           eventBus.emit({
-            type: "agent:response",
+            type: "command:complete",
             sessionId,
             timestamp: Date.now(),
-            content: part.text + "\n",
-            partial: true,
-          });
-          eventBus.emit({
-            type: "stage:change",
-            sessionId,
-            timestamp: Date.now(),
-            stage: "coding",
-            description: "Codex 응답 중...",
+            commandId: cmdId,
+            exitCode: item.exit_code,
+            durationMs: 0,
           });
         }
       }
     }
 
-    // Function call (tool use)
-    if (payloadType === "function_call") {
-      const toolName = payload.name ?? "unknown";
-      let toolInput: Record<string, unknown> = {};
-      try {
-        toolInput = typeof payload.arguments === "string"
-          ? JSON.parse(payload.arguments)
-          : (payload.arguments ?? {});
-      } catch {
-        toolInput = { raw: payload.arguments };
-      }
-
-      eventBus.emit({
-        type: "tool:call",
-        sessionId,
-        timestamp: Date.now(),
-        toolName,
-        toolId: payload.call_id ?? uuid(),
-        parameters: toolInput,
-      });
-
-      eventBus.emit({
-        type: "stage:change",
-        sessionId,
-        timestamp: Date.now(),
-        stage: "coding",
-        description: `도구 실행: ${toolName}`,
-      });
-
-      // Map shell commands
-      if (toolName === "shell_command" || toolName === "shell" || toolName === "bash") {
-        const cmdId = uuid();
-        eventBus.emit({
-          type: "command:execute",
-          sessionId,
-          timestamp: Date.now(),
-          command: String(toolInput.command ?? toolInput.cmd ?? ""),
-          commandId: cmdId,
-        });
-      }
-
-      // Map file writes
-      if (toolName === "write" || toolName === "create_file") {
+    // File change
+    if (item.type === "file_change" && type === "item.completed") {
+      const changes = item.changes ?? [];
+      for (const change of changes) {
         eventBus.emit({
           type: "file:write",
           sessionId,
           timestamp: Date.now(),
-          filePath: String(toolInput.path ?? toolInput.file_path ?? ""),
-          content: String(toolInput.content ?? toolInput.contents ?? ""),
-        });
-      }
-
-      // Map file edits
-      if (toolName === "edit" || toolName === "apply_diff" || toolName === "replace") {
-        eventBus.emit({
-          type: "file:edit",
-          sessionId,
-          timestamp: Date.now(),
-          filePath: String(toolInput.path ?? toolInput.file_path ?? ""),
-          oldString: String(toolInput.old_string ?? toolInput.search ?? ""),
-          newString: String(toolInput.new_string ?? toolInput.replace ?? ""),
+          filePath: change.path ?? "",
+          content: "",
         });
       }
     }
+  }
 
-    // Custom tool call (MCP etc.)
-    if (payloadType === "custom_tool_call") {
-      eventBus.emit({
-        type: "tool:call",
-        sessionId,
-        timestamp: Date.now(),
-        toolName: payload.name ?? "custom_tool",
-        toolId: payload.call_id ?? uuid(),
-        parameters: payload.arguments ?? {},
-      });
-    }
+  // ── Turn completed: token usage ──
+  if (type === "turn.completed" && event.usage) {
+    const u = event.usage;
+    eventBus.emit({
+      type: "token:update",
+      sessionId,
+      timestamp: Date.now(),
+      inputTokens: u.input_tokens ?? 0,
+      outputTokens: u.output_tokens ?? 0,
+      cacheReadTokens: u.cached_input_tokens ?? 0,
+      cacheWriteTokens: 0,
+      totalCostUsd: 0,
+      contextBudgetRemaining: -1,
+    });
   }
 }
 
