@@ -331,8 +331,16 @@ export const PROVIDER_MODELS: ProviderModel[] = [
   { id: "claude-opus-4-6", label: "Claude Opus 4.6", provider: "claude" },
   { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", provider: "claude" },
   // Codex (OpenAI)
-  { id: "o4-mini", label: "GPT o4-mini", provider: "codex" },
-  { id: "o3", label: "GPT o3", provider: "codex" },
+  { id: "gpt-5.4", label: "GPT-5.4 (최신)", provider: "codex" },
+  { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", provider: "codex" },
+  { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", provider: "codex" },
+  { id: "gpt-5.2-codex", label: "GPT-5.2 Codex", provider: "codex" },
+  { id: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max", provider: "codex" },
+  { id: "gpt-5.1-codex", label: "GPT-5.1 Codex", provider: "codex" },
+  { id: "gpt-5-codex", label: "GPT-5 Codex", provider: "codex" },
+  { id: "gpt-5-codex-mini", label: "GPT-5 Codex Mini", provider: "codex" },
+  { id: "o4-mini", label: "o4-mini", provider: "codex" },
+  { id: "o3", label: "o3", provider: "codex" },
 ];
 
 export interface PromptSendMessage {
