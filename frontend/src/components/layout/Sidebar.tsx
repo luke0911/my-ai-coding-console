@@ -62,7 +62,7 @@ export function Sidebar({ send }: SidebarProps) {
   return (
     <aside className="w-64 flex-shrink-0 border-r border-panel-border bg-panel-header flex flex-col overflow-hidden">
       {/* Auth status */}
-      <AuthSection send={send} mockMode={mockMode} />
+      <AuthSection send={send} mockMode={mockMode} provider={provider} />
 
       {/* Provider, Model & workspace */}
       <div className="p-3 border-b border-panel-border">
@@ -255,13 +255,18 @@ export function Sidebar({ send }: SidebarProps) {
 function AuthSection({
   send,
   mockMode,
+  provider,
 }: {
   send: (msg: ClientMessage) => void;
   mockMode: boolean;
+  provider: CodingProvider;
 }) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
+  const [showOpenAiKey, setShowOpenAiKey] = useState(false);
+  const [openAiKeyInput, setOpenAiKeyInput] = useState("");
+  const [openAiKeySet, setOpenAiKeySet] = useState(false);
 
   const handleApiKeySubmit = () => {
     const key = apiKeyInput.trim();
@@ -271,88 +276,166 @@ function AuthSection({
     setShowApiKey(false);
   };
 
+  const handleOpenAiKeySubmit = () => {
+    const key = openAiKeyInput.trim();
+    if (!key) return;
+    send({ type: "openaikey:set", apiKey: key });
+    setOpenAiKeySet(true);
+    setShowOpenAiKey(false);
+  };
+
   return (
     <div className="p-3 border-b border-panel-border">
       <div className="text-xs text-gray-500 mb-1">인증</div>
 
-      {/* Connected state */}
-      {!mockMode ? (
-        <div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
-            <span className="text-xs text-accent-green">Claude 연결됨</span>
-            <span className="ml-auto text-[10px] text-gray-600">
-              {apiKeySet ? "API Key" : "OAuth"}
-            </span>
-          </div>
-          {apiKeySet && (
-            <button
-              onClick={() => {
-                setApiKeySet(false);
-                setApiKeyInput("");
-                send({ type: "apikey:set", apiKey: "" });
-              }}
-              className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
-            >
-              API 키 해제
-            </button>
-          )}
-        </div>
-      ) : (
-        <div>
-          {/* Disconnected state */}
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="w-2 h-2 rounded-full bg-accent-orange flex-shrink-0 animate-pulse-slow" />
-            <span className="text-xs text-accent-orange">연결 안됨</span>
-          </div>
-
-          {/* OAuth option */}
-          <div className="text-[10px] text-gray-400 mb-1.5">
-            방법 1: 터미널에서 <code className="text-accent-blue bg-panel-bg px-1 rounded">claude</code> 로그인
-          </div>
-
-          {/* API key option */}
-          <div className="text-[10px] text-gray-400 mb-1">방법 2: API 키 직접 입력</div>
-          {!showApiKey ? (
-            <button
-              onClick={() => setShowApiKey(true)}
-              className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-            >
-              API 키 입력하기
-            </button>
-          ) : (
-            <div className="mt-1">
-              <div className="flex gap-1">
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleApiKeySubmit()}
-                  className="flex-1 min-w-0 text-xs bg-panel-bg border border-panel-border rounded px-2 py-1 text-gray-300 focus:border-accent-blue focus:outline-none"
-                  placeholder="sk-ant-..."
-                  autoFocus
-                />
-                <button
-                  onClick={handleApiKeySubmit}
-                  disabled={!apiKeyInput.trim()}
-                  className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
-                >
-                  설정
-                </button>
+      {/* Claude auth */}
+      {provider === "claude" && (
+        <>
+          {!mockMode ? (
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
+                <span className="text-xs text-accent-green">Claude 연결됨</span>
+                <span className="ml-auto text-[10px] text-gray-600">
+                  {apiKeySet ? "API Key" : "OAuth"}
+                </span>
               </div>
-              <button
-                onClick={() =>
-                  window.electronAPI?.openExternal(
-                    "https://console.anthropic.com/settings/keys"
-                  )
-                }
-                className="mt-1 text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-              >
-                API 키 발급받기
-              </button>
+              {apiKeySet && (
+                <button
+                  onClick={() => {
+                    setApiKeySet(false);
+                    setApiKeyInput("");
+                    send({ type: "apikey:set", apiKey: "" });
+                  }}
+                  className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
+                >
+                  API 키 해제
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="w-2 h-2 rounded-full bg-accent-orange flex-shrink-0 animate-pulse-slow" />
+                <span className="text-xs text-accent-orange">연결 안됨</span>
+              </div>
+              <div className="text-[10px] text-gray-400 mb-1.5">
+                방법 1: 터미널에서 <code className="text-accent-blue bg-panel-bg px-1 rounded">claude</code> 로그인
+              </div>
+              <div className="text-[10px] text-gray-400 mb-1">방법 2: API 키 직접 입력</div>
+              {!showApiKey ? (
+                <button
+                  onClick={() => setShowApiKey(true)}
+                  className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
+                >
+                  API 키 입력하기
+                </button>
+              ) : (
+                <div className="mt-1">
+                  <div className="flex gap-1">
+                    <input
+                      type="password"
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleApiKeySubmit()}
+                      className="flex-1 min-w-0 text-xs bg-panel-bg border border-panel-border rounded px-2 py-1 text-gray-300 focus:border-accent-blue focus:outline-none"
+                      placeholder="sk-ant-..."
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleApiKeySubmit}
+                      disabled={!apiKeyInput.trim()}
+                      className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
+                    >
+                      설정
+                    </button>
+                  </div>
+                  <button
+                    onClick={() =>
+                      window.electronAPI?.openExternal(
+                        "https://console.anthropic.com/settings/keys"
+                      )
+                    }
+                    className="mt-1 text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
+                  >
+                    API 키 발급받기
+                  </button>
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
+      )}
+
+      {/* OpenAI / Codex auth */}
+      {provider === "codex" && (
+        <>
+          {openAiKeySet ? (
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
+                <span className="text-xs text-accent-green">OpenAI 연결됨</span>
+                <span className="ml-auto text-[10px] text-gray-600">API Key</span>
+              </div>
+              <button
+                onClick={() => {
+                  setOpenAiKeySet(false);
+                  setOpenAiKeyInput("");
+                  send({ type: "openaikey:set", apiKey: "" });
+                }}
+                className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
+              >
+                API 키 해제
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="w-2 h-2 rounded-full bg-accent-orange flex-shrink-0 animate-pulse-slow" />
+                <span className="text-xs text-accent-orange">OpenAI API 키 필요</span>
+              </div>
+              {!showOpenAiKey ? (
+                <button
+                  onClick={() => setShowOpenAiKey(true)}
+                  className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
+                >
+                  OpenAI API 키 입력하기
+                </button>
+              ) : (
+                <div className="mt-1">
+                  <div className="flex gap-1">
+                    <input
+                      type="password"
+                      value={openAiKeyInput}
+                      onChange={(e) => setOpenAiKeyInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleOpenAiKeySubmit()}
+                      className="flex-1 min-w-0 text-xs bg-panel-bg border border-panel-border rounded px-2 py-1 text-gray-300 focus:border-accent-blue focus:outline-none"
+                      placeholder="sk-..."
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleOpenAiKeySubmit}
+                      disabled={!openAiKeyInput.trim()}
+                      className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
+                    >
+                      설정
+                    </button>
+                  </div>
+                  <button
+                    onClick={() =>
+                      window.electronAPI?.openExternal(
+                        "https://platform.openai.com/api-keys"
+                      )
+                    }
+                    className="mt-1 text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
+                  >
+                    OpenAI API 키 발급받기
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

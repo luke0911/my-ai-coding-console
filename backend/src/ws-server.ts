@@ -239,6 +239,23 @@ async function handleClientMessage(
       });
       break;
     }
+
+    case "openaikey:set": {
+      if (msg.apiKey && msg.apiKey.trim()) {
+        process.env.OPENAI_API_KEY = msg.apiKey.trim();
+        console.log("[WS] OpenAI API 키 설정됨");
+      } else {
+        delete process.env.OPENAI_API_KEY;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "openaikey:status",
+          configured: !!process.env.OPENAI_API_KEY,
+          timestamp: Date.now(),
+        })
+      );
+      break;
+    }
   }
 }
 

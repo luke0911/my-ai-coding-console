@@ -370,10 +370,16 @@ export interface ApiKeySetMessage {
   apiKey: string;
 }
 
+export interface OpenAiKeySetMessage {
+  type: "openaikey:set";
+  apiKey: string;
+}
+
 export type ClientMessage =
   | PromptSendMessage
   | ApprovalRespondMessage
   | SessionResumeMessage
   | SessionListMessage
   | ConfigUpdateMessage
-  | ApiKeySetMessage;
+  | ApiKeySetMessage
+  | OpenAiKeySetMessage;
