@@ -14,10 +14,18 @@ export interface CodexSessionOptions {
   prompt: string;
   workspacePath: string;
   model?: string;
+  resumeThreadId?: string;
+}
+
+/** Maps our sessionId → Codex thread_id for resume */
+const codexThreadIds = new Map<string, string>();
+
+export function getCodexThreadId(sessionId: string): string | undefined {
+  return codexThreadIds.get(sessionId);
 }
 
 export async function runCodexSession(options: CodexSessionOptions): Promise<void> {
-  const { sessionId, prompt, workspacePath, model } = options;
+  const { sessionId, prompt, workspacePath, model, resumeThreadId } = options;
   const selectedModel = model ?? "o4-mini";
 
   eventBus.emit({
@@ -51,14 +59,24 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
     // fallback
   }
 
-  const args = [
-    "exec",
-    "--json",
-    "--full-auto",
-    "--skip-git-repo-check",
-    "--model", selectedModel,
-    fullPrompt,
-  ];
+  // Resume existing thread or start new exec
+  const args = resumeThreadId
+    ? [
+        "resume",
+        "--json",
+        "--full-auto",
+        "--skip-git-repo-check",
+        resumeThreadId,
+        fullPrompt,
+      ]
+    : [
+        "exec",
+        "--json",
+        "--full-auto",
+        "--skip-git-repo-check",
+        "--model", selectedModel,
+        fullPrompt,
+      ];
 
   return new Promise<void>((resolve, reject) => {
     console.log(`[Codex] CLI 실행: codex exec --json ...`);
@@ -163,6 +181,12 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
  */
 function processCodexEvent(sessionId: string, event: any): void {
   const type = event.type;
+
+  // ── Thread started: save thread_id for resume ──
+  if (type === "thread.started" && event.thread_id) {
+    codexThreadIds.set(sessionId, event.thread_id);
+    console.log(`[Codex] Thread started: ${event.thread_id} → session ${sessionId}`);
+  }
 
   // ── Turn started: agent is thinking ──
   if (type === "turn.started") {

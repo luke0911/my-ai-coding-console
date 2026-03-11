@@ -19,7 +19,7 @@ import type {
 import type { CodingProvider } from "@my-ai-console/shared";
 import { eventBus } from "./event-bus.js";
 import { runClaudeSession, getCliSessionId } from "./claude-client.js";
-import { runCodexSession } from "./codex-client.js";
+import { runCodexSession, getCodexThreadId } from "./codex-client.js";
 
 interface SessionState {
   info: SessionInfo;
@@ -182,29 +182,50 @@ export async function createSession(
   existingSessionId?: string,
   provider: CodingProvider = "claude"
 ): Promise<string> {
-  // Follow-up: resume existing CLI session (Claude only)
-  if (existingSessionId && provider === "claude") {
+  // Follow-up: resume existing CLI session
+  if (existingSessionId) {
     const existingState = sessions.get(existingSessionId);
-    const cliId = getCliSessionId(existingSessionId);
 
-    if (existingState && cliId) {
-      console.log(`[SessionManager] Follow-up prompt for session ${existingSessionId}, resuming CLI session ${cliId}`);
-      existingState.info.promptCount++;
-      existingState.info.lastActiveAt = Date.now();
+    // Claude resume via --resume
+    if (provider === "claude") {
+      const cliId = getCliSessionId(existingSessionId);
+      if (existingState && cliId) {
+        console.log(`[SessionManager] Follow-up prompt for session ${existingSessionId}, resuming CLI session ${cliId}`);
+        existingState.info.promptCount++;
+        existingState.info.lastActiveAt = Date.now();
+        subscribeToSessionEvents(existingSessionId, existingState);
+        runClaudeSession({
+          sessionId: existingSessionId,
+          prompt,
+          workspacePath,
+          model,
+          resumeSessionId: cliId,
+        }).catch((err) => {
+          console.error(`[SessionManager] Session ${existingSessionId} error:`, err);
+        });
+        return existingSessionId;
+      }
+    }
 
-      subscribeToSessionEvents(existingSessionId, existingState);
-
-      runClaudeSession({
-        sessionId: existingSessionId,
-        prompt,
-        workspacePath,
-        model,
-        resumeSessionId: cliId,
-      }).catch((err) => {
-        console.error(`[SessionManager] Session ${existingSessionId} error:`, err);
-      });
-
-      return existingSessionId;
+    // Codex resume via thread_id
+    if (provider === "codex") {
+      const threadId = getCodexThreadId(existingSessionId);
+      if (existingState && threadId) {
+        console.log(`[SessionManager] Follow-up prompt for session ${existingSessionId}, resuming Codex thread ${threadId}`);
+        existingState.info.promptCount++;
+        existingState.info.lastActiveAt = Date.now();
+        subscribeToSessionEvents(existingSessionId, existingState);
+        runCodexSession({
+          sessionId: existingSessionId,
+          prompt,
+          workspacePath,
+          model,
+          resumeThreadId: threadId,
+        }).catch((err) => {
+          console.error(`[SessionManager] Session ${existingSessionId} error:`, err);
+        });
+        return existingSessionId;
+      }
     }
   }
 
