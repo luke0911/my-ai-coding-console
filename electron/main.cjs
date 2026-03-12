@@ -13,6 +13,8 @@ const http = require("http");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const IS_WIN = process.platform === "win32";
+const IS_MAC = process.platform === "darwin";
+const IS_LINUX = process.platform === "linux";
 const BACKEND_PORT = 3001;
 const FRONTEND_PORT = 3000;
 const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
@@ -129,9 +131,9 @@ function createWindow() {
     minWidth: 500,
     minHeight: 300,
     title: "AI 코딩 콘솔",
-    ...(process.platform === "darwin" ? { icon: path.join(__dirname, "icon.icns") } : {}),
+    icon: path.join(__dirname, IS_MAC ? "icon.icns" : "icon.png"),
     backgroundColor: "#0d1117",
-    ...(process.platform === "darwin" ? {
+    ...(IS_MAC ? {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 12, y: 12 },
     } : {}),

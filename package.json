@@ -15,7 +15,49 @@
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build -w shared && npm run build -w backend && npm run build -w frontend",
-    "build:shared": "npm run build -w shared"
+    "build:shared": "npm run build -w shared",
+    "dist": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.ai-coding-console.app",
+    "productName": "AI 코딩 콘솔",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "backend/dist/**/*",
+      "backend/package.json",
+      "frontend/.next/**/*",
+      "frontend/public/**/*",
+      "frontend/package.json",
+      "shared/dist/**/*",
+      "shared/package.json",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "icon": "electron/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "electron/icon.png",
+      "category": "Development",
+      "desktop": {
+        "Name": "AI 코딩 콘솔",
+        "Comment": "AI Coding Console",
+        "Terminal": "false"
+      }
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "electron/icon.png"
+    }
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

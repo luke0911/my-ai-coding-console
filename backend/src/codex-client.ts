@@ -55,6 +55,8 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
     `${process.env.HOME}/.nvm/versions/node/${process.version}/bin`,
     "/usr/local/bin",
     "/opt/homebrew/bin",
+    "/home/linuxbrew/.linuxbrew/bin",
+    "/snap/bin",
     `${process.env.HOME}/.local/bin`,
   ].join(":");
   const enrichedPath = `${extraPaths}:${process.env.PATH ?? ""}`;
@@ -319,6 +321,8 @@ export function isCodexAvailable(): boolean {
     `${process.env.HOME}/.nvm/versions/node/${process.version}/bin`,
     "/usr/local/bin",
     "/opt/homebrew/bin",
+    "/home/linuxbrew/.linuxbrew/bin",
+    "/snap/bin",
     `${process.env.HOME}/.local/bin`,
   ].join(":");
   const env = { ...process.env, PATH: `${extraPaths}:${process.env.PATH ?? ""}` };
