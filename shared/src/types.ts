@@ -14,6 +14,7 @@ export interface SessionInfo {
   totalOutputTokens: number;
   totalCostUsd: number;
   changedFiles: string[];
+  provider?: import("./events").CodingProvider;
 }
 
 export interface SessionListResponse {

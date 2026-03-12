@@ -19,7 +19,20 @@ import type {
 import type { CodingProvider } from "@my-ai-console/shared";
 import { eventBus } from "./event-bus.js";
 import { runClaudeSession, getCliSessionId } from "./claude-client.js";
-import { runCodexSession, getCodexThreadId } from "./codex-client.js";
+import { runCodexSession, getCodexThreadId, isCodexAvailable } from "./codex-client.js";
+import { runClaudeSdkSession, getSdkSessionId } from "./claude-sdk-client.js";
+import { runOpenAiSdkSession } from "./openai-sdk-client.js";
+import { runMockSession } from "./mock-mode.js";
+import { execSync } from "child_process";
+
+function isClaudeCliAvailable(): boolean {
+  try {
+    execSync("claude --version", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface SessionState {
   info: SessionInfo;
@@ -173,7 +186,56 @@ function subscribeToSessionEvents(sessionId: string, state: SessionState): () =>
 }
 
 /**
- * Create a new session or continue an existing one, then start the Claude agent.
+ * Build a handoff context string from an existing session's event log.
+ * Used when switching providers mid-session to preserve continuity.
+ */
+function buildHandoffContext(state: SessionState): string {
+  const lines: string[] = [];
+  lines.push("=== 이전 세션 컨텍스트 (프로바이더 전환) ===");
+  lines.push(`작업 폴더: ${state.info.workspacePath}`);
+
+  // Changed files
+  const changedFiles = Array.from(state.fileChanges.keys());
+  if (changedFiles.length > 0) {
+    lines.push(`\n변경된 파일:`);
+    for (const f of changedFiles) {
+      const fc = state.fileChanges.get(f)!;
+      lines.push(`  - ${f} (${fc.changeType})`);
+    }
+  }
+
+  // Commands executed
+  const commands: string[] = [];
+  for (const event of state.eventLog) {
+    if (event.type === "command:execute") {
+      commands.push(event.command);
+    }
+  }
+  if (commands.length > 0) {
+    lines.push(`\n실행한 명령어:`);
+    for (const cmd of commands.slice(-10)) {
+      lines.push(`  $ ${cmd}`);
+    }
+  }
+
+  // Last response text (last few agent:response events)
+  const responseTexts: string[] = [];
+  for (const event of state.eventLog) {
+    if (event.type === "agent:response" && event.partial && event.content) {
+      responseTexts.push(event.content);
+    }
+  }
+  if (responseTexts.length > 0) {
+    const lastResponse = responseTexts.join("").slice(-1000);
+    lines.push(`\n마지막 응답 요약:\n${lastResponse}`);
+  }
+
+  lines.push("\n=== 이전 컨텍스트 끝 ===\n");
+  return lines.join("\n");
+}
+
+/**
+ * Create a new session or continue an existing one, then start the agent.
  */
 export async function createSession(
   prompt: string,
@@ -182,27 +244,58 @@ export async function createSession(
   existingSessionId?: string,
   provider: CodingProvider = "claude"
 ): Promise<string> {
-  // Follow-up: resume existing CLI session
+  // Follow-up: resume existing session
   if (existingSessionId) {
     const existingState = sessions.get(existingSessionId);
+    const previousProvider = existingState?.info.provider;
 
-    // Claude resume via --resume
+    // Provider handoff: switching providers within the same session
+    if (existingState && previousProvider && previousProvider !== provider) {
+      console.log(`[SessionManager] Provider handoff: ${previousProvider} → ${provider} for session ${existingSessionId}`);
+      const handoffContext = buildHandoffContext(existingState);
+      const handoffPrompt = `${handoffContext}\n\n${prompt}`;
+      existingState.info.provider = provider;
+      existingState.info.promptCount++;
+      existingState.info.lastActiveAt = Date.now();
+      subscribeToSessionEvents(existingSessionId, existingState);
+
+      routeSession(existingSessionId, handoffPrompt, workspacePath, model, provider).catch((err) => {
+        console.error(`[SessionManager] Session ${existingSessionId} handoff error:`, err);
+      });
+      return existingSessionId;
+    }
+
+    // Claude resume via --resume (CLI) or SDK session_id
     if (provider === "claude") {
       const cliId = getCliSessionId(existingSessionId);
-      if (existingState && cliId) {
-        console.log(`[SessionManager] Follow-up prompt for session ${existingSessionId}, resuming CLI session ${cliId}`);
+      const sdkId = getSdkSessionId(existingSessionId);
+      if (existingState && (cliId || sdkId)) {
+        console.log(`[SessionManager] Follow-up prompt for session ${existingSessionId}, resuming ${cliId ? "CLI" : "SDK"} session ${cliId ?? sdkId}`);
         existingState.info.promptCount++;
         existingState.info.lastActiveAt = Date.now();
         subscribeToSessionEvents(existingSessionId, existingState);
-        runClaudeSession({
-          sessionId: existingSessionId,
-          prompt,
-          workspacePath,
-          model,
-          resumeSessionId: cliId,
-        }).catch((err) => {
-          console.error(`[SessionManager] Session ${existingSessionId} error:`, err);
-        });
+
+        if (cliId) {
+          runClaudeSession({
+            sessionId: existingSessionId,
+            prompt,
+            workspacePath,
+            model,
+            resumeSessionId: cliId,
+          }).catch((err) => {
+            console.error(`[SessionManager] Session ${existingSessionId} error:`, err);
+          });
+        } else {
+          runClaudeSdkSession({
+            sessionId: existingSessionId,
+            prompt,
+            workspacePath,
+            model,
+            resumeSessionId: sdkId,
+          }).catch((err) => {
+            console.error(`[SessionManager] Session ${existingSessionId} error:`, err);
+          });
+        }
         return existingSessionId;
       }
     }
@@ -227,6 +320,22 @@ export async function createSession(
         return existingSessionId;
       }
     }
+
+    // Follow-up without native resume support (OpenAI SDK mode, Mock mode, etc.)
+    // Reuse existing session state and build context from previous conversation.
+    if (existingState) {
+      console.log(`[SessionManager] Follow-up (no resume ID) for session ${existingSessionId}, building context`);
+      const handoffContext = buildHandoffContext(existingState);
+      const contextPrompt = `${handoffContext}\n\n${prompt}`;
+      existingState.info.promptCount++;
+      existingState.info.lastActiveAt = Date.now();
+      subscribeToSessionEvents(existingSessionId, existingState);
+
+      routeSession(existingSessionId, contextPrompt, workspacePath, model, provider).catch((err) => {
+        console.error(`[SessionManager] Session ${existingSessionId} follow-up error:`, err);
+      });
+      return existingSessionId;
+    }
   }
 
   // New session
@@ -245,6 +354,7 @@ export async function createSession(
       totalOutputTokens: 0,
       totalCostUsd: 0,
       changedFiles: [],
+      provider,
     },
     eventLog: [],
     toolActivities: new Map(),
@@ -254,22 +364,48 @@ export async function createSession(
   sessions.set(sessionId, state);
   subscribeToSessionEvents(sessionId, state);
 
-  // Route to the correct provider
-  const runSession = () => {
-    switch (provider) {
-      case "codex":
-        return runCodexSession({ sessionId, prompt, workspacePath, model });
-      case "claude":
-      default:
-        return runClaudeSession({ sessionId, prompt, workspacePath, model });
-    }
-  };
-
-  runSession().catch((err) => {
+  routeSession(sessionId, prompt, workspacePath, model, provider).catch((err) => {
     console.error(`[SessionManager] Session ${sessionId} (${provider}) error:`, err);
   });
 
   return sessionId;
+}
+
+/**
+ * Route a session to the correct provider backend.
+ * Priority: CLI available → SDK (API key) → Mock mode
+ */
+async function routeSession(
+  sessionId: string,
+  prompt: string,
+  workspacePath: string,
+  model: string,
+  provider: CodingProvider
+): Promise<void> {
+  switch (provider) {
+    case "codex": {
+      if (isCodexAvailable()) {
+        return runCodexSession({ sessionId, prompt, workspacePath, model });
+      }
+      if (process.env.OPENAI_API_KEY) {
+        console.log("[SessionManager] Codex CLI 없음 → OpenAI SDK fallback");
+        return runOpenAiSdkSession({ sessionId, prompt, workspacePath, model });
+      }
+      throw new Error("Codex CLI 또는 OpenAI API 키가 필요합니다");
+    }
+    case "claude":
+    default: {
+      if (isClaudeCliAvailable()) {
+        return runClaudeSession({ sessionId, prompt, workspacePath, model }).then(() => {});
+      }
+      if (process.env.ANTHROPIC_API_KEY) {
+        console.log("[SessionManager] Claude CLI 없음 → Claude SDK fallback");
+        return runClaudeSdkSession({ sessionId, prompt, workspacePath, model });
+      }
+      console.log("[SessionManager] CLI/API 키 없음 → Mock 모드");
+      return runMockSession(sessionId, prompt, workspacePath);
+    }
+  }
 }
 
 export function getSessionInfo(sessionId: string): SessionInfo | null {

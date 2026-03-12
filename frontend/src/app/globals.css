@@ -89,3 +89,16 @@ body {
 .resize-handle:hover {
   background: #58a6ff;
 }
+
+/* ── Data Analysis ── */
+
+/* Plotly chart container — match dark theme */
+.js-plotly-plot .plotly .modebar {
+  background: rgba(22, 27, 34, 0.8) !important;
+}
+.js-plotly-plot .plotly .modebar-btn path {
+  fill: #8b949e !important;
+}
+.js-plotly-plot .plotly .modebar-btn:hover path {
+  fill: #e6edf3 !important;
+}

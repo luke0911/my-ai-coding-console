@@ -9,7 +9,7 @@ import { ApprovalDialog } from "@/components/approval/ApprovalDialog";
 import { useSessionStore } from "@/store/session-store";
 
 export default function Home() {
-  const { send, reconnect } = useWebSocket();
+  const { send, reconnect, reconnecting, reconnectCount } = useWebSocket();
   const connected = useSessionStore((s) => s.connected);
   const activeConsoleId = useSessionStore((s) => s.activeConsoleId);
 
@@ -39,18 +39,34 @@ export default function Home() {
           <div className="flex items-center gap-1.5">
             <div
               className={`w-2 h-2 rounded-full ${
-                connected ? "bg-accent-green" : "bg-accent-red animate-pulse-slow"
+                connected
+                  ? "bg-accent-green"
+                  : reconnecting
+                    ? "bg-accent-orange animate-pulse"
+                    : "bg-accent-red animate-pulse-slow"
               }`}
             />
             <span className="text-gray-400">
-              {connected ? "연결됨" : "연결 끊김"}
+              {connected
+                ? "연결됨"
+                : reconnecting
+                  ? `재연결 중${reconnectCount > 0 ? ` (${reconnectCount}회)` : "..."}`
+                  : "연결 끊김"}
             </span>
-            {!connected && (
+            {!connected && !reconnecting && (
               <button
                 onClick={reconnect}
                 className="ml-1 px-2 py-0.5 text-[10px] bg-accent-blue/20 text-accent-blue rounded hover:bg-accent-blue/30 transition-colors"
               >
                 재연결
+              </button>
+            )}
+            {!connected && reconnecting && (
+              <button
+                onClick={reconnect}
+                className="ml-1 px-2 py-0.5 text-[10px] bg-accent-orange/20 text-accent-orange rounded hover:bg-accent-orange/30 transition-colors"
+              >
+                다시 시도
               </button>
             )}
           </div>

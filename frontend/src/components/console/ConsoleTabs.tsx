@@ -1,6 +1,7 @@
 "use client";
 
 import { useSessionStore } from "@/store/session-store";
+import { useAnalysisStore } from "@/store/analysis-store";
 
 const STAGE_DOTS: Record<string, string> = {
   thinking: "bg-accent-blue",
@@ -30,12 +31,20 @@ export function ConsoleTabs() {
   const closeConsole = useSessionStore((s) => s.closeConsole);
   const createNewConsole = useSessionStore((s) => s.createNewConsole);
 
+  const analysisMode = useAnalysisStore((s) => s.analysisMode);
+  const setAnalysisMode = useAnalysisStore((s) => s.setAnalysisMode);
+
+  const handleConsoleClick = (consoleId: string) => {
+    setAnalysisMode(false);
+    setActiveConsole(consoleId);
+  };
+
   return (
     <div className="flex items-center bg-panel-header border-b border-panel-border overflow-x-auto flex-shrink-0">
       {openConsoles.map((consoleId, idx) => {
         const data = sessionData[consoleId];
         const stage = data?.stage ?? "idle";
-        const isActive = consoleId === activeConsoleId;
+        const isActive = consoleId === activeConsoleId && !analysisMode;
         const isNew = consoleId.startsWith("new-");
         const dotClass = STAGE_DOTS[stage];
         const stageLabel = STAGE_LABELS[stage];
@@ -45,7 +54,7 @@ export function ConsoleTabs() {
         return (
           <div
             key={consoleId}
-            onClick={() => setActiveConsole(consoleId)}
+            onClick={() => handleConsoleClick(consoleId)}
             className={`group flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer border-b-2 transition-colors min-w-0 flex-shrink-0 ${
               isActive
                 ? "border-accent-blue text-gray-200 bg-panel-bg"
@@ -90,6 +99,19 @@ export function ConsoleTabs() {
           </div>
         );
       })}
+
+      {/* Data Analysis tab */}
+      <div
+        onClick={() => setAnalysisMode(true)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer border-b-2 transition-colors flex-shrink-0 ${
+          analysisMode
+            ? "border-accent-purple text-gray-200 bg-panel-bg"
+            : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-panel-bg/50"
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-accent-purple" />
+        <span className="whitespace-nowrap">데이터 분석</span>
+      </div>
 
       <button
         onClick={() => createNewConsole()}

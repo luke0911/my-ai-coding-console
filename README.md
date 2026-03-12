@@ -1,182 +1,152 @@
-# My AI Coding Console
+# AI Coding Console
 
-An AI coding observability dashboard — watch Claude code in real time.
+AI 코딩 에이전트의 작업 과정을 실시간으로 관찰하는 데스크톱 앱.
 
-## What is this?
+Claude / Codex 에이전트가 파일을 읽고, 수정하고, 명령어를 실행하는 모든 과정을 시각화합니다.
 
-A local-first web app that acts as a custom UI for Claude-powered coding sessions. Instead of just showing chat output, it exposes the entire coding process: file reads, edits, diffs, command execution, test results, reasoning summaries, and token usage.
+## Features
+
+- **실시간 스트리밍** — 에이전트 응답, 파일 변경, 명령어 실행을 WebSocket으로 실시간 표시
+- **멀티 프로바이더** — Claude / Codex 프로바이더 전환 지원 (세션 컨텍스트 핸드오프 포함)
+- **3중 연결 모드** — CLI 우선 → SDK fallback → Mock 모드 자동 전환
+- **데이터 분석** — CSV/Excel/TXT 파일 업로드 → AI 분석 → Plotly 차트 시각화 (11종)
+- **Diff 뷰어** — Monaco 에디터 기반 파일 변경 사항 비교
+- **토큰 대시보드** — 입출력 토큰, 캐시, 비용, 컨텍스트 예산 실시간 표시
+- **승인 모드** — 파일 쓰기/명령어 실행 전 사용자 승인 요청
+- **Electron 데스크톱 앱** — macOS 네이티브 앱으로 실행
 
 ## Architecture
 
 ```
-Frontend (Next.js :3000)  ←— WebSocket —→  Backend (Node.js :3001)
-                                              ↓
-                                      Claude Agent SDK
-                                      (or mock mode)
+┌─────────────────────────────────────────────┐
+│              Electron Shell                 │
+│  ┌─────────────┐      ┌──────────────────┐  │
+│  │  Frontend    │ ←WS→ │    Backend       │  │
+│  │  Next.js     │      │    Express + ws  │  │
+│  │  :3000       │      │    :3001         │  │
+│  └─────────────┘      └───────┬──────────┘  │
+│                               │              │
+│                    ┌──────────┴──────────┐   │
+│                    │   Provider Layer    │   │
+│                    ├─────────┬──────────┤   │
+│                    │ Claude  │  Codex   │   │
+│                    │ CLI/SDK │  CLI/SDK │   │
+│                    └─────────┴──────────┘   │
+└─────────────────────────────────────────────┘
 ```
 
-- **Frontend**: Next.js + React + TypeScript + Tailwind CSS + Monaco Editor
-- **Backend**: Node.js + Express + ws (WebSocket) + TypeScript
-- **Shared**: Typed event schemas used by both frontend and backend
-- **State**: Zustand (lightweight, no boilerplate)
-- **Real-time**: WebSocket with auto-reconnect
+## Tech Stack
+
+| Layer | Stack |
+|-------|-------|
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, Zustand, Monaco Editor, Plotly.js |
+| Backend | Node.js, Express, ws (WebSocket), TypeScript (ESM) |
+| Shared | TypeScript 타입 패키지 (이벤트 스키마, 도메인 타입) |
+| Desktop | Electron 33 |
+| AI | Claude Agent SDK, Anthropic SDK, OpenAI SDK |
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 18+
-- npm 9+ (uses workspaces)
+- **Node.js** 22+
+- **npm** 9+ (workspaces 지원)
 
-### Setup
+### 설치 & 실행
 
 ```bash
-# Install all dependencies
+# 의존성 설치
 npm install
 
-# Build the shared types package
-npm run build:shared
+# 전체 빌드 (shared → backend → frontend)
+npm run build
 
-# Start both frontend and backend
+# 개발 모드 (백엔드 + 프론트엔드 동시 실행)
 npm run dev
+
+# Electron 앱으로 실행
+npm run app
 ```
 
-This starts:
-- Frontend at http://localhost:3000
-- Backend at http://localhost:3001 (WebSocket at ws://localhost:3001/ws)
-
-### Environment Variables
+### 환경 변수
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | No | Claude API key. If not set, runs in **mock mode** |
-| `PORT` | No | Backend port (default: 3001) |
-| `NEXT_PUBLIC_WS_URL` | No | WebSocket URL (default: ws://localhost:3001/ws) |
+| `ANTHROPIC_API_KEY` | No | Claude API 키. SDK fallback에 사용 |
+| `OPENAI_API_KEY` | No | Codex/OpenAI API 키. SDK fallback에 사용 |
+| `PORT` | No | 백엔드 포트 (기본: 3001) |
 
-### Mock Mode
+### 연결 모드
 
-If `ANTHROPIC_API_KEY` is not set, the backend runs in mock mode — it simulates a realistic coding session with file reads, writes, diffs, test execution, and streaming responses. This is useful for frontend development and demos.
+앱은 다음 순서로 자동 연결을 시도합니다:
 
-## UI Layout
-
-```
-┌──────────┬────────────────────────┬───────────┐
-│ Sidebar  │     Center Panel       │  Right    │
-│          │  ┌──────────────────┐  │  Panel    │
-│ Sessions │  │   Prompt Input   │  │           │
-│ Model    │  ├──────────────────┤  │  Plan     │
-│ Tokens   │  │   Live Stream    │  │  Reason   │
-│ Stage    │  │   / Diff View    │  │  Warnings │
-│ Files    │  │   / File View    │  │           │
-│ Tools    │  ├──────────────────┤  │           │
-│          │  │  File Timeline   │  │           │
-├──────────┴──┴──────────────────┴──┴───────────┤
-│              Bottom Panel                      │
-│   Terminal | Tests | Commands | Hooks          │
-└────────────────────────────────────────────────┘
-```
-
-## Features
-
-### Implemented (MVP)
-- [x] Prompt passthrough to Claude Agent SDK
-- [x] Real-time event streaming via WebSocket
-- [x] Live stream view (event timeline + response text)
-- [x] File change tracking and visualization
-- [x] Diff viewer (Monaco diff editor)
-- [x] File viewer (Monaco editor)
-- [x] Reasoning summary panel
-- [x] Current plan / next action display
-- [x] Token and cost dashboard with context budget meter
-- [x] Terminal output panel
-- [x] Test results panel
-- [x] Command history
-- [x] Hook event system and log
-- [x] Approval mode (manual/auto toggle)
-- [x] Session persistence (JSON file storage)
-- [x] Session list and resume
-- [x] Mock mode for development
-- [x] Auto-reconnect WebSocket
-- [x] File change timeline
-
-### Future Extensions
-- [ ] xterm.js integration for full ANSI terminal rendering
-- [ ] Interactive file tree browser
-- [ ] Multi-session parallel view
-- [ ] Custom hook registration from UI
-- [ ] Session export/import
-- [ ] Prompt history and templates
-- [ ] Dark/light theme toggle
-- [ ] Keyboard shortcuts
-- [ ] Workspace file watcher
-- [ ] Git integration (branch, commit, diff from HEAD)
-- [ ] Cost budget limits / alerts
-- [ ] Plugin system for custom panels
-
-## Event Schema
-
-Events flow from backend to frontend via WebSocket. Each event has a `type`, `sessionId`, and `timestamp`.
-
-**Session lifecycle**: `session:created`, `session:resumed`, `session:completed`, `session:error`
-**Agent activity**: `agent:thinking`, `agent:response`, `agent:plan`, `agent:reasoning`
-**Tool calls**: `tool:call`, `tool:result`
-**File operations**: `file:read`, `file:write`, `file:diff`
-**Commands**: `command:execute`, `command:output`, `command:complete`
-**Tests**: `test:run`, `test:result`
-**Tokens**: `token:update`
-**Approval**: `approval:request`, `approval:response`
-**Hooks**: `hook:event`
-**Stage**: `stage:change`
-
-See `shared/src/events.ts` for full type definitions.
+1. **CLI 모드** — `claude` / `codex` CLI가 설치되어 있으면 CLI를 직접 실행
+2. **SDK 모드** — CLI 없이 API 키만 있으면 SDK로 직접 연결
+3. **Mock 모드** — 둘 다 없으면 시뮬레이션 모드로 실행 (개발/데모용)
 
 ## Project Structure
 
 ```
 my-ai-coding-console/
-├── shared/src/          # Shared TypeScript types
-│   ├── events.ts        # All event type definitions
-│   └── types.ts         # Domain types (sessions, tools, etc.)
+├── shared/src/
+│   ├── events.ts            # WebSocket 이벤트 타입 정의
+│   ├── types.ts             # 도메인 타입 (세션, 도구 등)
+│   ├── analysis-events.ts   # 데이터 분석 이벤트 타입
+│   └── index.ts             # Public API
 ├── backend/src/
-│   ├── index.ts         # Entry point (Express + HTTP server)
-│   ├── ws-server.ts     # WebSocket server + message routing
-│   ├── session-manager.ts  # Session lifecycle + persistence
-│   ├── claude-client.ts # Claude SDK wrapper + mock fallback
-│   ├── mock-mode.ts     # Simulated coding session
-│   ├── event-bus.ts     # Internal event pub/sub
-│   ├── hooks.ts         # Hook system (extensible)
-│   └── approval.ts      # Approval gating for file/command ops
+│   ├── index.ts             # Express + HTTP 서버 진입점
+│   ├── ws-server.ts         # WebSocket 서버 + 메시지 라우팅
+│   ├── session-manager.ts   # 세션 생명주기 + 영속화 + 핸드오프
+│   ├── claude-client.ts     # Claude CLI 클라이언트
+│   ├── claude-sdk-client.ts # Claude Agent SDK 클라이언트
+│   ├── codex-client.ts      # Codex CLI 클라이언트
+│   ├── openai-sdk-client.ts # OpenAI SDK 클라이언트
+│   ├── sdk-tools.ts         # SDK용 도구 실행기 (파일 R/W, 명령어)
+│   ├── mock-mode.ts         # 시뮬레이션 모드
+│   ├── data-analysis-manager.ts  # 파일 파싱 + 차트 데이터 준비
+│   ├── data-analysis-ai.ts  # AI 데이터 분석 (Claude/OpenAI)
+│   ├── data-analysis-routes.ts   # 데이터 분석 REST API
+│   ├── event-bus.ts         # 내부 이벤트 발행/구독
+│   ├── hooks.ts             # 훅 시스템
+│   └── approval.ts          # 승인 게이팅
 ├── frontend/src/
-│   ├── app/             # Next.js app router
-│   ├── components/      # UI components by feature
-│   │   ├── layout/      # Sidebar, CenterPanel, RightPanel, BottomPanel
-│   │   ├── prompt/      # PromptInput
-│   │   ├── stream/      # LiveStream (event timeline)
-│   │   ├── diff/        # DiffViewer (Monaco diff editor)
-│   │   ├── files/       # FileViewer (Monaco editor)
-│   │   ├── terminal/    # TerminalPanel
-│   │   ├── reasoning/   # ReasoningSummary
-│   │   ├── tokens/      # TokenDashboard
-│   │   ├── approval/    # ApprovalDialog
-│   │   ├── session/     # SessionList
-│   │   ├── timeline/    # FileTimeline
-│   │   └── hooks-panel/ # HooksPanel
-│   ├── hooks/           # React hooks (useWebSocket)
-│   ├── store/           # Zustand store
-│   └── lib/             # Utilities
-└── README.md
+│   ├── app/                 # Next.js App Router
+│   ├── components/
+│   │   ├── layout/          # Sidebar, CenterPanel, RightPanel, BottomPanel
+│   │   ├── prompt/          # PromptInput
+│   │   ├── stream/          # LiveStream (이벤트 타임라인)
+│   │   ├── console/         # ConsoleTabs (멀티 콘솔)
+│   │   ├── diff/            # DiffViewer (Monaco diff)
+│   │   ├── files/           # FileViewer (Monaco)
+│   │   ├── terminal/        # TerminalPanel
+│   │   ├── reasoning/       # ReasoningSummary
+│   │   ├── tokens/          # TokenDashboard
+│   │   ├── approval/        # ApprovalDialog
+│   │   ├── timeline/        # FileTimeline
+│   │   ├── hooks-panel/     # HooksPanel
+│   │   └── analysis/        # 데이터 분석 (업로드, 차트, AI 요약)
+│   ├── hooks/               # React 훅 (useWebSocket)
+│   ├── store/               # Zustand 상태 관리
+│   └── lib/                 # 유틸리티
+├── electron/
+│   ├── main.cjs             # Electron 메인 프로세스
+│   ├── preload.cjs          # IPC 브릿지
+│   ├── loading.html         # 로딩 화면
+│   └── icon.icns            # 앱 아이콘
+└── package.json             # npm workspaces 루트
 ```
 
-## Design Decisions
+## Data Analysis
 
-1. **Event bus over direct coupling**: The backend uses an EventBus singleton to decouple Claude integration from WebSocket transport. This makes it easy to add new event sources or consumers.
+CSV, Excel(.xlsx/.xls), TXT/TSV 파일을 업로드하면:
 
-2. **Zustand over Redux**: For a dashboard that primarily receives events and displays them, Zustand's simplicity is ideal. No action creators, reducers, or middleware.
+1. **파싱** — 자동 구분자 감지, 스키마 추론 (타입, null 비율)
+2. **AI 분석** — 컬럼 설명, 통계량, 데이터 품질 노트, 추천 차트 생성
+3. **시각화** — 11종 차트 지원:
+   - Scatter, Bar, Line, Histogram, Box, Violin
+   - Pie, Heatmap, Correlation Matrix
+   - Scatter 3D, Bubble
 
-3. **Monaco for diffs**: The built-in diff editor provides a professional-grade experience with syntax highlighting, side-by-side comparison, and word-level diffs.
+## License
 
-4. **Mock mode built-in**: Rather than requiring an API key for development, mock mode generates realistic events. This makes frontend development independent of backend/API availability.
-
-5. **JSON file persistence**: For a local-first app, JSON files are simpler than SQLite or a database. Sessions are small and infrequently written.
-
-6. **Approval as Promise**: The approval manager uses a Promise-based API — `requestApproval()` blocks the agent until the user responds. This keeps the flow sequential and easy to reason about.
+MIT

@@ -287,6 +287,8 @@ export interface StageChangeEvent {
 
 // ─── Union type ─────────────────────────────────────────────────
 
+import type { AnalysisEvent } from "./analysis-events.js";
+
 export type ServerEvent =
   | SessionCreatedEvent
   | SessionResumedEvent
@@ -313,7 +315,8 @@ export type ServerEvent =
   | ApprovalResponseEvent
   | HookEvent
   | StageChangeEvent
-  | CodexRateLimitEvent;
+  | CodexRateLimitEvent
+  | AnalysisEvent;
 
 export type ServerEventType = ServerEvent["type"];
 

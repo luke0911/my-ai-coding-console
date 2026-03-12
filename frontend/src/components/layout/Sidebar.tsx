@@ -267,6 +267,7 @@ function AuthSection({
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
   const [openAiKeyInput, setOpenAiKeyInput] = useState("");
   const [openAiKeySet, setOpenAiKeySet] = useState(false);
+  const connectionDetail = useSessionStore((s) => s.connectionDetail);
 
   const handleApiKeySubmit = () => {
     const key = apiKeyInput.trim();
@@ -284,6 +285,12 @@ function AuthSection({
     setShowOpenAiKey(false);
   };
 
+  // Determine connection method for display
+  const claudeConnected = connectionDetail.claudeCli || connectionDetail.claudeSdk || apiKeySet;
+  const claudeMethod = connectionDetail.claudeCli ? "CLI" : (connectionDetail.claudeSdk || apiKeySet) ? "API Key" : null;
+  const codexConnected = connectionDetail.codexCli || connectionDetail.codexSdk || openAiKeySet;
+  const codexMethod = connectionDetail.codexCli ? "CLI" : (connectionDetail.codexSdk || openAiKeySet) ? "API Key" : null;
+
   return (
     <div className="p-3 border-b border-panel-border">
       <div className="text-xs text-gray-500 mb-1">인증</div>
@@ -291,15 +298,18 @@ function AuthSection({
       {/* Claude auth */}
       {provider === "claude" && (
         <>
-          {!mockMode ? (
+          {claudeConnected ? (
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
                 <span className="text-xs text-accent-green">Claude 연결됨</span>
                 <span className="ml-auto text-[10px] text-gray-600">
-                  {apiKeySet ? "API Key" : "OAuth"}
+                  {claudeMethod}
                 </span>
               </div>
+              {(apiKeySet || connectionDetail.claudeSdk) && !connectionDetail.claudeCli && (
+                <div className="text-[10px] text-gray-500 mt-0.5">SDK 모드 (CLI 미설치)</div>
+              )}
               {apiKeySet && (
                 <button
                   onClick={() => {
@@ -322,7 +332,7 @@ function AuthSection({
               <div className="text-[10px] text-gray-400 mb-1.5">
                 방법 1: 터미널에서 <code className="text-accent-blue bg-panel-bg px-1 rounded">claude</code> 로그인
               </div>
-              <div className="text-[10px] text-gray-400 mb-1">방법 2: API 키 직접 입력</div>
+              <div className="text-[10px] text-gray-400 mb-1">방법 2: API 키 직접 입력 (SDK 모드)</div>
               {!showApiKey ? (
                 <button
                   onClick={() => setShowApiKey(true)}
@@ -370,30 +380,41 @@ function AuthSection({
       {/* OpenAI / Codex auth */}
       {provider === "codex" && (
         <>
-          {openAiKeySet ? (
+          {codexConnected ? (
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
-                <span className="text-xs text-accent-green">OpenAI 연결됨</span>
-                <span className="ml-auto text-[10px] text-gray-600">API Key</span>
+                <span className="text-xs text-accent-green">Codex 연결됨</span>
+                <span className="ml-auto text-[10px] text-gray-600">
+                  {codexMethod}
+                </span>
               </div>
-              <button
-                onClick={() => {
-                  setOpenAiKeySet(false);
-                  setOpenAiKeyInput("");
-                  send({ type: "openaikey:set", apiKey: "" });
-                }}
-                className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
-              >
-                API 키 해제
-              </button>
+              {(openAiKeySet || connectionDetail.codexSdk) && !connectionDetail.codexCli && (
+                <div className="text-[10px] text-gray-500 mt-0.5">SDK 모드 (CLI 미설치)</div>
+              )}
+              {openAiKeySet && (
+                <button
+                  onClick={() => {
+                    setOpenAiKeySet(false);
+                    setOpenAiKeyInput("");
+                    send({ type: "openaikey:set", apiKey: "" });
+                  }}
+                  className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
+                >
+                  API 키 해제
+                </button>
+              )}
             </div>
           ) : (
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="w-2 h-2 rounded-full bg-accent-orange flex-shrink-0 animate-pulse-slow" />
-                <span className="text-xs text-accent-orange">OpenAI API 키 필요</span>
+                <span className="text-xs text-accent-orange">Codex 연결 안됨</span>
               </div>
+              <div className="text-[10px] text-gray-400 mb-1.5">
+                방법 1: 터미널에서 <code className="text-accent-blue bg-panel-bg px-1 rounded">codex</code> 설치
+              </div>
+              <div className="text-[10px] text-gray-400 mb-1">방법 2: OpenAI API 키 입력 (SDK 모드)</div>
               {!showOpenAiKey ? (
                 <button
                   onClick={() => setShowOpenAiKey(true)}

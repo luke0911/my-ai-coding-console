@@ -8,8 +8,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   selectFolder: () => ipcRenderer.invoke("dialog:selectFolder"),
-  getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
+  selectDataFile: () => ipcRenderer.invoke("dialog:selectDataFile"),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+  // Backend management
+  restartBackend: () => ipcRenderer.invoke("app:restartBackend"),
   // Claude auth
   openClaudeLogin: () => ipcRenderer.invoke("auth:openClaudeLogin"),
   checkClaudeSession: () => ipcRenderer.invoke("auth:checkClaudeSession"),

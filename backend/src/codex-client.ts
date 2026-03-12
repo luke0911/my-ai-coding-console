@@ -51,10 +51,21 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
 
   const fullPrompt = `${koreanInstruction}\n\n${prompt}`;
 
+  const extraPaths = [
+    `${process.env.HOME}/.nvm/versions/node/${process.version}/bin`,
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    `${process.env.HOME}/.local/bin`,
+  ].join(":");
+  const enrichedPath = `${extraPaths}:${process.env.PATH ?? ""}`;
+
   let codexPath = "codex";
   try {
     const findCmd = process.platform === "win32" ? "where codex" : "which codex";
-    codexPath = execSync(findCmd, { encoding: "utf-8" }).trim().split("\n")[0];
+    codexPath = execSync(findCmd, {
+      encoding: "utf-8",
+      env: { ...process.env, PATH: enrichedPath },
+    }).trim().split("\n")[0];
   } catch {
     // fallback
   }
@@ -86,7 +97,7 @@ export async function runCodexSession(options: CodexSessionOptions): Promise<voi
       cwd: workspacePath,
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
-      env: { ...process.env },
+      env: { ...process.env, PATH: enrichedPath },
     });
 
     let stdoutBuffer = "";
@@ -304,8 +315,15 @@ function processCodexEvent(sessionId: string, event: any): void {
 }
 
 export function isCodexAvailable(): boolean {
+  const extraPaths = [
+    `${process.env.HOME}/.nvm/versions/node/${process.version}/bin`,
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    `${process.env.HOME}/.local/bin`,
+  ].join(":");
+  const env = { ...process.env, PATH: `${extraPaths}:${process.env.PATH ?? ""}` };
   try {
-    execSync("codex --version", { stdio: "pipe" });
+    execSync("codex --version", { stdio: "pipe", env });
     return true;
   } catch {
     return false;

@@ -209,6 +209,10 @@ export interface SessionStore {
   providerAvailability: { claude: boolean; codex: boolean };
   setProviderAvailability: (avail: { claude: boolean; codex: boolean }) => void;
 
+  // Detailed connection info (CLI vs SDK per provider)
+  connectionDetail: { claudeCli: boolean; claudeSdk: boolean; codexCli: boolean; codexSdk: boolean };
+  setConnectionDetail: (detail: { claudeCli: boolean; claudeSdk: boolean; codexCli: boolean; codexSdk: boolean }) => void;
+
   // Codex rate limit (from codex:rate_limit events)
   codexRateLimit: {
     primaryUsedPercent: number;
@@ -366,6 +370,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   // Provider availability
   providerAvailability: { claude: false, codex: false },
   setProviderAvailability: (avail) => set({ providerAvailability: avail }),
+
+  // Detailed connection info
+  connectionDetail: { claudeCli: false, claudeSdk: false, codexCli: false, codexSdk: false },
+  setConnectionDetail: (detail) => set({ connectionDetail: detail }),
 
   // Codex rate limit
   codexRateLimit: {

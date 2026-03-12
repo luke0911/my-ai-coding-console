@@ -1,8 +1,3 @@
-/** Format a number with commas */
-export function formatNumber(n: number): string {
-  return n.toLocaleString();
-}
-
 /** Format cost in USD */
 export function formatCost(usd: number): string {
   if (usd < 0.01) return `$${usd.toFixed(4)}`;
@@ -56,9 +51,4 @@ export function extToLanguage(ext: string): string {
     bash: "shell",
   };
   return map[ext] ?? "plaintext";
-}
-
-/** Classname merge utility */
-export function cn(...classes: (string | false | undefined | null)[]): string {
-  return classes.filter(Boolean).join(" ");
 }

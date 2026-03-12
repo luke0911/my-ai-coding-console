@@ -93,11 +93,70 @@ function UsageBarItem({ label, percent, resetTime }: UsageBar) {
   );
 }
 
+function formatCost(usd: number): string {
+  if (usd <= 0) return "$0";
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+function SessionTokenSection({ tokens }: { tokens: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; totalCostUsd: number; contextBudgetRemaining: number } }) {
+  if (!tokens || (tokens.inputTokens === 0 && tokens.outputTokens === 0)) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-panel-border space-y-1">
+      <div className="text-[10px] text-gray-500 font-medium mb-1">현재 세션</div>
+      <div className="flex justify-between text-[10px]">
+        <span className="text-gray-500">입력 토큰</span>
+        <span className="text-gray-400">{tokens.inputTokens.toLocaleString()}</span>
+      </div>
+      <div className="flex justify-between text-[10px]">
+        <span className="text-gray-500">출력 토큰</span>
+        <span className="text-gray-400">{tokens.outputTokens.toLocaleString()}</span>
+      </div>
+      {tokens.cacheReadTokens > 0 && (
+        <div className="flex justify-between text-[10px]">
+          <span className="text-gray-500">캐시 읽기</span>
+          <span className="text-gray-400">{tokens.cacheReadTokens.toLocaleString()}</span>
+        </div>
+      )}
+      {tokens.cacheWriteTokens > 0 && (
+        <div className="flex justify-between text-[10px]">
+          <span className="text-gray-500">캐시 쓰기</span>
+          <span className="text-gray-400">{tokens.cacheWriteTokens.toLocaleString()}</span>
+        </div>
+      )}
+      {tokens.totalCostUsd > 0 && (
+        <div className="flex justify-between text-[10px]">
+          <span className="text-gray-500">비용</span>
+          <span className="text-accent-blue font-medium">{formatCost(tokens.totalCostUsd)}</span>
+        </div>
+      )}
+      {tokens.contextBudgetRemaining >= 0 && tokens.contextBudgetRemaining < 1 && (
+        <div className="mt-1">
+          <div className="flex items-center justify-between mb-0.5">
+            <span className="text-[10px] text-gray-500">컨텍스트</span>
+            <span className="text-[10px] text-gray-400">
+              {Math.round(tokens.contextBudgetRemaining * 100)}% 남음
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-700/40 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-accent-blue transition-all duration-500"
+              style={{ width: `${Math.max(tokens.contextBudgetRemaining * 100, 2)}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TokenDashboard() {
   const provider = useSessionStore((s) => s.provider);
   const accountUsage = useSessionStore((s) => s.accountUsage);
   const requestUsageRefresh = useSessionStore((s) => s.requestUsageRefresh);
   const codexRateLimit = useSessionStore((s) => s.codexRateLimit);
+  const quota = useSessionStore((s) => s.quota);
   const activeData = useSessionStore((s) =>
     s.activeConsoleId ? s.sessionData[s.activeConsoleId] : null
   );
@@ -127,6 +186,30 @@ export function TokenDashboard() {
     return bars;
   }, [codexRateLimit]);
 
+  // API rate limit bars (for API key mode)
+  const apiRateLimitBars: UsageBar[] = useMemo(() => {
+    const bars: UsageBar[] = [];
+    if (quota.rateLimitTokensLimit > 0) {
+      const used = quota.rateLimitTokensLimit - quota.rateLimitTokensRemaining;
+      const percent = Math.round((used / quota.rateLimitTokensLimit) * 100);
+      bars.push({
+        label: "토큰 한도",
+        percent,
+        resetTime: quota.rateLimitTokensReset ? `${quota.rateLimitTokensReset} 재설정` : "",
+      });
+    }
+    if (quota.rateLimitRequestsLimit > 0) {
+      const used = quota.rateLimitRequestsLimit - quota.rateLimitRequestsRemaining;
+      const percent = Math.round((used / quota.rateLimitRequestsLimit) * 100);
+      bars.push({
+        label: "요청 한도",
+        percent,
+        resetTime: "",
+      });
+    }
+    return bars;
+  }, [quota]);
+
   const tokens = activeData?.tokens;
 
   if (provider === "codex") {
@@ -144,68 +227,68 @@ export function TokenDashboard() {
           </div>
         ) : (
           <div className="text-[11px] text-gray-600 py-1">
-            Codex 세션 실행 후 사용량이 표시됩니다.
+            세션 실행 후 사용량이 표시됩니다.
           </div>
         )}
 
-        {/* Token counts for current session */}
-        {tokens && (tokens.inputTokens > 0 || tokens.outputTokens > 0) && (
-          <div className="mt-2 pt-2 border-t border-panel-border space-y-1">
-            <div className="flex justify-between text-[10px]">
-              <span className="text-gray-500">입력 토큰</span>
-              <span className="text-gray-400">{tokens.inputTokens.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-[10px]">
-              <span className="text-gray-500">출력 토큰</span>
-              <span className="text-gray-400">{tokens.outputTokens.toLocaleString()}</span>
-            </div>
-            {tokens.cacheReadTokens > 0 && (
-              <div className="flex justify-between text-[10px]">
-                <span className="text-gray-500">캐시 토큰</span>
-                <span className="text-gray-400">{tokens.cacheReadTokens.toLocaleString()}</span>
-              </div>
-            )}
-            {tokens.contextBudgetRemaining >= 0 && (
-              <div className="mt-1">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[10px] text-gray-500">컨텍스트</span>
-                  <span className="text-[10px] text-gray-400">
-                    {Math.round(tokens.contextBudgetRemaining * 100)}% 남음
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-gray-700/40 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-accent-blue transition-all duration-500"
-                    style={{ width: `${Math.max(tokens.contextBudgetRemaining * 100, 2)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {tokens && <SessionTokenSection tokens={tokens} />}
       </div>
     );
   }
 
   // Claude provider
+  const hasDailyUsage = quota.dailyInputTokens > 0 || quota.dailyOutputTokens > 0;
+
   return (
     <div className="p-3 border-b border-panel-border">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-gray-500">사용량</span>
-        <button
-          onClick={requestUsageRefresh}
-          className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-        >
-          새로고침
-        </button>
+        {claudeBars.length > 0 && (
+          <button
+            onClick={requestUsageRefresh}
+            className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
+          >
+            새로고침
+          </button>
+        )}
       </div>
 
-      {claudeBars.length > 0 ? (
+      {/* API rate limit bars (API key mode) */}
+      {apiRateLimitBars.length > 0 && (
+        <div className="space-y-3 mb-2">
+          {apiRateLimitBars.map((bar, i) => (
+            <UsageBarItem key={`api-${i}`} {...bar} />
+          ))}
+        </div>
+      )}
+
+      {/* Daily usage summary (API key mode) */}
+      {hasDailyUsage && (
+        <div className="space-y-1 mb-2">
+          <div className="text-[10px] text-gray-500 font-medium">오늘 누적</div>
+          <div className="flex justify-between text-[10px]">
+            <span className="text-gray-500">입력</span>
+            <span className="text-gray-400">{quota.dailyInputTokens.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[10px]">
+            <span className="text-gray-500">출력</span>
+            <span className="text-gray-400">{quota.dailyOutputTokens.toLocaleString()}</span>
+          </div>
+          {quota.dailyCostUsd > 0 && (
+            <div className="flex justify-between text-[10px]">
+              <span className="text-gray-500">비용</span>
+              <span className="text-accent-blue font-medium">{formatCost(quota.dailyCostUsd)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Scraped claude.ai usage bars (Claude Max/Pro) */}
+      {claudeBars.length > 0 && (
         <div className="space-y-3">
           {claudeBars.map((bar, i) => (
             <UsageBarItem key={i} {...bar} />
           ))}
-
           {accountUsage.scrapedAt > 0 && (
             <div className="text-[10px] text-gray-600 text-right pt-1">
               {new Date(accountUsage.scrapedAt).toLocaleTimeString("ko-KR", {
@@ -216,11 +299,17 @@ export function TokenDashboard() {
             </div>
           )}
         </div>
-      ) : (
-        <div className="text-[11px] text-gray-600 py-2 leading-relaxed">
-          사용량 패널에서 claude.ai 로그인 후 데이터가 표시됩니다.
+      )}
+
+      {/* No data at all hint */}
+      {claudeBars.length === 0 && apiRateLimitBars.length === 0 && !hasDailyUsage && !tokens?.inputTokens && (
+        <div className="text-[11px] text-gray-600 py-1 leading-relaxed">
+          세션 실행 후 사용량이 표시됩니다.
         </div>
       )}
+
+      {/* Current session token counts */}
+      {tokens && <SessionTokenSection tokens={tokens} />}
     </div>
   );
 }

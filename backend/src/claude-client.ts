@@ -10,7 +10,6 @@ import { spawn, execSync, type ChildProcess } from "child_process";
 import { v4 as uuid } from "uuid";
 import { eventBus } from "./event-bus.js";
 import { hookManager } from "./hooks.js";
-import { runMockSession } from "./mock-mode.js";
 
 export interface ClaudeSessionOptions {
   sessionId?: string;
@@ -30,18 +29,9 @@ export interface ClaudeSession {
 
 const activeSessions = new Map<string, ClaudeSession>();
 
-/** Check if claude CLI is available */
-async function isClaudeAvailable(): Promise<boolean> {
-  try {
-    execSync("claude --version", { stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Runs a Claude coding session by spawning the CLI.
+ * Note: Routing (CLI vs SDK vs Mock) is handled by session-manager.
  */
 export async function runClaudeSession(
   options: ClaudeSessionOptions
@@ -54,25 +44,6 @@ export async function runClaudeSession(
   };
 
   activeSessions.set(sessionId, session);
-
-  const available = await isClaudeAvailable();
-  if (!available) {
-    console.log("[Claude] CLI를 찾을 수 없습니다. 모의 모드로 실행합니다.");
-    try {
-      await runMockSession(sessionId, options.prompt, options.workspacePath);
-      session.status = "completed";
-    } catch (err) {
-      session.status = "error";
-      eventBus.emit({
-        type: "session:error",
-        sessionId,
-        timestamp: Date.now(),
-        error: err instanceof Error ? err.message : String(err),
-        recoverable: false,
-      });
-    }
-    return session;
-  }
 
   try {
     await runCLISession(session, options.prompt, options.workspacePath, options.model, options.resumeSessionId);
@@ -381,7 +352,7 @@ function processMessage(
 /**
  * Map specific tool calls to file/command events for the UI.
  */
-function emitToolSpecificEvents(
+export function emitToolSpecificEvents(
   sessionId: string,
   toolName: string,
   input: Record<string, unknown>
@@ -506,10 +477,3 @@ export function getCliSessionId(sessionId: string): string | undefined {
   return activeSessions.get(sessionId)?.cliSessionId;
 }
 
-export function getSession(sessionId: string): ClaudeSession | undefined {
-  return activeSessions.get(sessionId);
-}
-
-export function getAllSessions(): ClaudeSession[] {
-  return Array.from(activeSessions.values());
-}

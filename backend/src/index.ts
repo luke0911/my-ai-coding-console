@@ -11,6 +11,7 @@ import cors from "cors";
 import { execSync } from "child_process";
 import { createServer } from "http";
 import { setupWebSocketServer } from "./ws-server.js";
+import { createAnalysisRouter } from "./data-analysis-routes.js";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 
@@ -26,6 +27,9 @@ function checkClaudeCli(): boolean {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Data analysis routes
+app.use("/api/data", createAnalysisRouter());
 
 // Health check
 app.get("/health", (_req, res) => {

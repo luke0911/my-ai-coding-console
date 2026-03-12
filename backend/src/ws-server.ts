@@ -94,14 +94,18 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
     // Send initial connection acknowledgment with per-provider availability
     const claudeAvailable = isClaudeCliAvailable();
     const codexAvailable = isCodexAvailable();
+    const claudeSdkAvailable = !!process.env.ANTHROPIC_API_KEY;
+    const codexSdkAvailable = !!process.env.OPENAI_API_KEY;
     ws.send(
       JSON.stringify({
         type: "connection:established",
         timestamp: Date.now(),
-        mockMode: !claudeAvailable,
+        mockMode: !claudeAvailable && !claudeSdkAvailable,
         cliAvailable: claudeAvailable,
         claudeAvailable,
         codexAvailable,
+        claudeSdkAvailable,
+        codexSdkAvailable,
       })
     );
 
@@ -221,13 +225,29 @@ async function handleClientMessage(
         delete process.env.ANTHROPIC_API_KEY;
       }
       const cliReady = isClaudeCliAvailable();
+      const sdkReady = !!process.env.ANTHROPIC_API_KEY;
       ws.send(
         JSON.stringify({
           type: "apikey:status",
-          configured: !!process.env.ANTHROPIC_API_KEY || cliReady,
-          mockMode: !cliReady && !process.env.ANTHROPIC_API_KEY,
+          configured: sdkReady || cliReady,
+          mockMode: !cliReady && !sdkReady,
           cliAvailable: cliReady,
+          claudeSdkAvailable: sdkReady,
           timestamp: Date.now(),
+        })
+      );
+
+      // Update provider availability for frontend
+      ws.send(
+        JSON.stringify({
+          type: "connection:established",
+          timestamp: Date.now(),
+          mockMode: !cliReady && !sdkReady,
+          cliAvailable: cliReady,
+          claudeAvailable: cliReady,
+          codexAvailable: isCodexAvailable(),
+          claudeSdkAvailable: sdkReady,
+          codexSdkAvailable: !!process.env.OPENAI_API_KEY,
         })
       );
 
@@ -247,11 +267,27 @@ async function handleClientMessage(
       } else {
         delete process.env.OPENAI_API_KEY;
       }
+      const openAiSdkReady = !!process.env.OPENAI_API_KEY;
       ws.send(
         JSON.stringify({
           type: "openaikey:status",
-          configured: !!process.env.OPENAI_API_KEY,
+          configured: openAiSdkReady,
+          codexSdkAvailable: openAiSdkReady,
           timestamp: Date.now(),
+        })
+      );
+
+      // Update provider availability for frontend
+      ws.send(
+        JSON.stringify({
+          type: "connection:established",
+          timestamp: Date.now(),
+          mockMode: !isClaudeCliAvailable() && !process.env.ANTHROPIC_API_KEY,
+          cliAvailable: isClaudeCliAvailable(),
+          claudeAvailable: isClaudeCliAvailable(),
+          codexAvailable: isCodexAvailable(),
+          claudeSdkAvailable: !!process.env.ANTHROPIC_API_KEY,
+          codexSdkAvailable: openAiSdkReady,
         })
       );
       break;

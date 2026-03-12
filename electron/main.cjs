@@ -27,8 +27,7 @@ let authPopup = null;
 
 function startBackend() {
   return new Promise((resolve) => {
-    const tsxBin = path.join(ROOT_DIR, "node_modules", ".bin", IS_WIN ? "tsx.cmd" : "tsx");
-    backendProcess = spawn(tsxBin, ["src/index.ts"], {
+    backendProcess = spawn("node", ["dist/index.js"], {
       cwd: path.join(ROOT_DIR, "backend"),
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PORT: String(BACKEND_PORT) },
@@ -193,7 +192,33 @@ ipcMain.handle("dialog:selectFolder", async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle("app:getVersion", () => app.getVersion());
+ipcMain.handle("dialog:selectDataFile", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "데이터 파일 선택",
+    properties: ["openFile"],
+    filters: [
+      { name: "데이터 파일", extensions: ["csv", "xlsx", "xls", "txt", "tsv"] },
+      { name: "CSV", extensions: ["csv"] },
+      { name: "Excel", extensions: ["xlsx", "xls"] },
+      { name: "텍스트", extensions: ["txt", "tsv"] },
+    ],
+    buttonLabel: "파일 선택",
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle("app:restartBackend", async () => {
+  console.log("[ipc] Restarting backend...");
+  killProcess(backendProcess);
+  backendProcess = null;
+  // Wait for the old process to fully die
+  await new Promise((r) => setTimeout(r, 1000));
+  await startBackend();
+  const ready = await waitForServer(BACKEND_HEALTH, 10000);
+  console.log(`[ipc] Backend restart ${ready ? "succeeded" : "timed out"}`);
+  return { success: ready };
+});
 
 ipcMain.handle("shell:openExternal", (_event, url) => {
   // Only allow https URLs to Anthropic domains

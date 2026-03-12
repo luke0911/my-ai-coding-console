@@ -8,8 +8,9 @@
 
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useSessionStore, createEmptySessionData } from "@/store/session-store";
+import { useAnalysisStore } from "@/store/analysis-store";
 import type { ClientMessage, ServerEvent } from "@my-ai-console/shared";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001/ws";
@@ -21,6 +22,9 @@ export function useWebSocket() {
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disposedRef = useRef(false);
+  const backendRestartAttemptedRef = useRef(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectCount, setReconnectCount] = useState(0);
 
   const handleEvent = useCallback(
     (event: ServerEvent | Record<string, unknown>) => {
@@ -34,8 +38,14 @@ export function useWebSocket() {
           const ce = event as any;
           s.setMockMode(!!ce.mockMode);
           s.setProviderAvailability({
-            claude: !!ce.claudeAvailable,
-            codex: !!ce.codexAvailable,
+            claude: !!ce.claudeAvailable || !!ce.claudeSdkAvailable,
+            codex: !!ce.codexAvailable || !!ce.codexSdkAvailable,
+          });
+          s.setConnectionDetail({
+            claudeCli: !!ce.claudeAvailable,
+            claudeSdk: !!ce.claudeSdkAvailable,
+            codexCli: !!ce.codexAvailable,
+            codexSdk: !!ce.codexSdkAvailable,
           });
           return;
         }
@@ -61,6 +71,38 @@ export function useWebSocket() {
             rateLimitRequestsLimit: e.rateLimitRequestsLimit,
             rateLimitRequestsRemaining: e.rateLimitRequestsRemaining,
           });
+          return;
+        }
+
+        // ── Analysis events (global, no sessionId routing) ──
+        case "analysis:upload:complete": {
+          const e = event as any;
+          useAnalysisStore.getState().setUploadResult({
+            analysisId: e.analysisId,
+            schema: e.schema,
+            preview: e.preview,
+          });
+          return;
+        }
+        case "analysis:ai:thinking": {
+          useAnalysisStore.getState().setAiAnalysisLoading(true);
+          return;
+        }
+        case "analysis:ai:result": {
+          const e = event as any;
+          useAnalysisStore.getState().setAiAnalysis(e.result);
+          return;
+        }
+        case "analysis:chart:ready": {
+          const e = event as any;
+          useAnalysisStore.getState().setChartReady(e.chartData, e.chartLayout);
+          return;
+        }
+        case "analysis:error": {
+          const e = event as any;
+          useAnalysisStore.getState().setError(e.error);
+          useAnalysisStore.getState().setAiAnalysisLoading(false);
+          useAnalysisStore.getState().setChartLoading(false);
           return;
         }
       }
@@ -441,6 +483,7 @@ export function useWebSocket() {
     if (disposedRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
+    setReconnecting(true);
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
@@ -452,6 +495,9 @@ export function useWebSocket() {
       console.log("[WS] Connected");
       useSessionStore.getState().setConnected(true);
       reconnectAttemptRef.current = 0;
+      backendRestartAttemptedRef.current = false;
+      setReconnecting(false);
+      setReconnectCount(0);
       ws.send(JSON.stringify({ type: "session:list" }));
     };
 
@@ -484,8 +530,21 @@ export function useWebSocket() {
       MAX_RECONNECT_DELAY
     );
     reconnectAttemptRef.current++;
+    setReconnectCount(reconnectAttemptRef.current);
 
-    console.log(`[WS] Reconnecting in ${delay}ms...`);
+    // After 3 failed attempts, try to restart backend via Electron IPC
+    if (
+      reconnectAttemptRef.current >= 3 &&
+      !backendRestartAttemptedRef.current &&
+      typeof window !== "undefined" &&
+      (window as any).electronAPI?.restartBackend
+    ) {
+      console.log("[WS] Multiple reconnection failures — requesting backend restart");
+      backendRestartAttemptedRef.current = true;
+      (window as any).electronAPI.restartBackend();
+    }
+
+    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})...`);
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       if (!disposedRef.current) {
@@ -515,9 +574,38 @@ export function useWebSocket() {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    // Reset backoff counter and connect immediately
+    // Reset backoff counter
     reconnectAttemptRef.current = 0;
-    connect();
+    backendRestartAttemptedRef.current = false;
+    setReconnecting(true);
+    setReconnectCount(0);
+
+    // Check if backend is reachable; if not, try to restart it via Electron IPC
+    fetch("http://localhost:3001/health", { signal: AbortSignal.timeout(2000) })
+      .then((res) => {
+        if (res.ok) {
+          console.log("[WS] Backend is healthy, reconnecting WebSocket...");
+          connect();
+        } else {
+          throw new Error("unhealthy");
+        }
+      })
+      .catch(() => {
+        console.log("[WS] Backend unreachable, attempting restart...");
+        if (
+          typeof window !== "undefined" &&
+          (window as any).electronAPI?.restartBackend
+        ) {
+          backendRestartAttemptedRef.current = true;
+          (window as any).electronAPI.restartBackend().then(() => {
+            // Wait for backend to come up, then connect
+            setTimeout(() => connect(), 3000);
+          });
+        } else {
+          // Not in Electron — just try connecting anyway
+          connect();
+        }
+      });
   }, [connect]);
 
   useEffect(() => {
@@ -533,5 +621,5 @@ export function useWebSocket() {
     };
   }, [connect]);
 
-  return { send, reconnect };
+  return { send, reconnect, reconnecting, reconnectCount };
 }
