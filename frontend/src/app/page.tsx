@@ -6,12 +6,14 @@ import { CenterPanel } from "@/components/layout/CenterPanel";
 import { RightPanel } from "@/components/layout/RightPanel";
 import { BottomPanel } from "@/components/layout/BottomPanel";
 import { ApprovalDialog } from "@/components/approval/ApprovalDialog";
+import { WelcomeSetupDialog } from "@/components/setup/WelcomeSetupDialog";
 import { useSessionStore } from "@/store/session-store";
 
 export default function Home() {
   const { send, reconnect, reconnecting, reconnectCount } = useWebSocket();
   const connected = useSessionStore((s) => s.connected);
   const activeConsoleId = useSessionStore((s) => s.activeConsoleId);
+  const showWelcomeDialog = useSessionStore((s) => s.showWelcomeDialog);
 
   // Collect pending approvals across all open sessions
   const firstApproval = useSessionStore((s) => {
@@ -99,6 +101,9 @@ export default function Home() {
           send={send}
         />
       )}
+
+      {/* Welcome setup dialog */}
+      {showWelcomeDialog && <WelcomeSetupDialog send={send} />}
     </div>
   );
 }

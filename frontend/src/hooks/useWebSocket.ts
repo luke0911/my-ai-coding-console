@@ -47,12 +47,40 @@ export function useWebSocket() {
             codexCli: !!ce.codexAvailable,
             codexSdk: !!ce.codexSdkAvailable,
           });
+          // Track stored key info from backend
+          s.setHasStoredKeys({
+            anthropic: !!ce.hasStoredAnthropicKey,
+            openai: !!ce.hasStoredOpenAiKey,
+          });
+          // Show welcome dialog on first connect if no providers are available
+          const anyProvider =
+            !!ce.claudeAvailable || !!ce.claudeSdkAvailable ||
+            !!ce.codexAvailable || !!ce.codexSdkAvailable;
+          if (!anyProvider && !s.showWelcomeDialog) {
+            s.setShowWelcomeDialog(true);
+          }
           return;
         }
 
-        case "apikey:status":
-          s.setMockMode(!!(event as any).mockMode);
+        case "apikey:status": {
+          const ak = event as any;
+          s.setMockMode(!!ak.mockMode);
+          // Close welcome dialog if key was successfully configured
+          if (ak.configured) {
+            s.setShowWelcomeDialog(false);
+            s.setHasStoredKeys({ ...s.hasStoredKeys, anthropic: true });
+          }
           return;
+        }
+
+        case "openaikey:status": {
+          const ok = event as any;
+          if (ok.configured) {
+            s.setShowWelcomeDialog(false);
+            s.setHasStoredKeys({ ...s.hasStoredKeys, openai: true });
+          }
+          return;
+        }
 
         case "session:list:response":
           s.setSessions((event as any).sessions ?? []);

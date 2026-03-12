@@ -227,6 +227,12 @@ export interface SessionStore {
     secondaryResetsAt: number;
   }) => void;
 
+  // Welcome / onboarding dialog
+  showWelcomeDialog: boolean;
+  setShowWelcomeDialog: (v: boolean) => void;
+  hasStoredKeys: { anthropic: boolean; openai: boolean };
+  setHasStoredKeys: (v: { anthropic: boolean; openai: boolean }) => void;
+
   // UI
   selectedPanel: "stream" | "diff" | "file" | "usage";
   setSelectedPanel: (panel: "stream" | "diff" | "file" | "usage") => void;
@@ -383,6 +389,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     secondaryResetsAt: 0,
   },
   setCodexRateLimit: (rl) => set({ codexRateLimit: rl }),
+
+  // Welcome / onboarding dialog
+  showWelcomeDialog: false,
+  setShowWelcomeDialog: (v) => set({ showWelcomeDialog: v }),
+  hasStoredKeys: { anthropic: false, openai: false },
+  setHasStoredKeys: (v) => set({ hasStoredKeys: v }),
 
   // UI
   selectedPanel: "stream",

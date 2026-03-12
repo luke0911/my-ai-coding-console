@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSessionStore } from "@/store/session-store";
 import { TokenDashboard } from "@/components/tokens/TokenDashboard";
-import { formatTime, truncatePath } from "@/lib/utils";
+import { truncatePath } from "@/lib/utils";
 import { PROVIDER_MODELS } from "@my-ai-console/shared";
 import type { ClientMessage, CodingProvider } from "@my-ai-console/shared";
 
@@ -250,213 +250,234 @@ export function Sidebar({ send }: SidebarProps) {
 }
 
 /**
- * Auth section: shows OAuth status + API key fallback
+ * Auth section: shows both providers at a glance with connection status.
+ * "발급받기" links are always visible. A "설정" button reopens the welcome dialog.
  */
 function AuthSection({
   send,
   mockMode,
-  provider,
 }: {
   send: (msg: ClientMessage) => void;
   mockMode: boolean;
   provider: CodingProvider;
 }) {
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [apiKeySet, setApiKeySet] = useState(false);
-  const [showOpenAiKey, setShowOpenAiKey] = useState(false);
-  const [openAiKeyInput, setOpenAiKeyInput] = useState("");
-  const [openAiKeySet, setOpenAiKeySet] = useState(false);
+  const [anthropicInput, setAnthropicInput] = useState("");
+  const [openaiInput, setOpenaiInput] = useState("");
+  const [showClaudeInput, setShowClaudeInput] = useState(false);
+  const [showCodexInput, setShowCodexInput] = useState(false);
   const connectionDetail = useSessionStore((s) => s.connectionDetail);
+  const hasStoredKeys = useSessionStore((s) => s.hasStoredKeys);
+  const setShowWelcomeDialog = useSessionStore((s) => s.setShowWelcomeDialog);
 
-  const handleApiKeySubmit = () => {
-    const key = apiKeyInput.trim();
-    if (!key) return;
-    send({ type: "apikey:set", apiKey: key });
-    setApiKeySet(true);
-    setShowApiKey(false);
-  };
+  const claudeConnected = connectionDetail.claudeCli || connectionDetail.claudeSdk;
+  const codexConnected = connectionDetail.codexCli || connectionDetail.codexSdk;
 
-  const handleOpenAiKeySubmit = () => {
-    const key = openAiKeyInput.trim();
-    if (!key) return;
-    send({ type: "openaikey:set", apiKey: key });
-    setOpenAiKeySet(true);
-    setShowOpenAiKey(false);
-  };
+  const claudeMethod = connectionDetail.claudeCli
+    ? "CLI"
+    : hasStoredKeys.anthropic
+      ? "API (저장됨)"
+      : connectionDetail.claudeSdk
+        ? "API"
+        : null;
 
-  // Determine connection method for display
-  const claudeConnected = connectionDetail.claudeCli || connectionDetail.claudeSdk || apiKeySet;
-  const claudeMethod = connectionDetail.claudeCli ? "CLI" : (connectionDetail.claudeSdk || apiKeySet) ? "API Key" : null;
-  const codexConnected = connectionDetail.codexCli || connectionDetail.codexSdk || openAiKeySet;
-  const codexMethod = connectionDetail.codexCli ? "CLI" : (connectionDetail.codexSdk || openAiKeySet) ? "API Key" : null;
+  const codexMethod = connectionDetail.codexCli
+    ? "CLI"
+    : hasStoredKeys.openai
+      ? "API (저장됨)"
+      : connectionDetail.codexSdk
+        ? "API"
+        : null;
 
   return (
     <div className="p-3 border-b border-panel-border">
-      <div className="text-xs text-gray-500 mb-1">인증</div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs text-gray-500">인증</span>
+        <button
+          onClick={() => setShowWelcomeDialog(true)}
+          className="text-[10px] text-accent-blue hover:text-accent-blue/80 transition-colors"
+        >
+          설정
+        </button>
+      </div>
 
-      {/* Claude auth */}
-      {provider === "claude" && (
-        <>
-          {claudeConnected ? (
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
-                <span className="text-xs text-accent-green">Claude 연결됨</span>
-                <span className="ml-auto text-[10px] text-gray-600">
-                  {claudeMethod}
-                </span>
-              </div>
-              {(apiKeySet || connectionDetail.claudeSdk) && !connectionDetail.claudeCli && (
-                <div className="text-[10px] text-gray-500 mt-0.5">SDK 모드 (CLI 미설치)</div>
-              )}
-              {apiKeySet && (
-                <button
-                  onClick={() => {
-                    setApiKeySet(false);
-                    setApiKeyInput("");
-                    send({ type: "apikey:set", apiKey: "" });
-                  }}
-                  className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
-                >
-                  API 키 해제
-                </button>
-              )}
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className="w-2 h-2 rounded-full bg-accent-orange flex-shrink-0 animate-pulse-slow" />
-                <span className="text-xs text-accent-orange">연결 안됨</span>
-              </div>
-              <div className="text-[10px] text-gray-400 mb-1.5">
-                방법 1: 터미널에서 <code className="text-accent-blue bg-panel-bg px-1 rounded">claude</code> 로그인
-              </div>
-              <div className="text-[10px] text-gray-400 mb-1">방법 2: API 키 직접 입력 (SDK 모드)</div>
-              {!showApiKey ? (
-                <button
-                  onClick={() => setShowApiKey(true)}
-                  className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-                >
-                  API 키 입력하기
-                </button>
-              ) : (
-                <div className="mt-1">
-                  <div className="flex gap-1">
-                    <input
-                      type="password"
-                      value={apiKeyInput}
-                      onChange={(e) => setApiKeyInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleApiKeySubmit()}
-                      className="flex-1 min-w-0 text-xs bg-panel-bg border border-panel-border rounded px-2 py-1 text-gray-300 focus:border-accent-blue focus:outline-none"
-                      placeholder="sk-ant-..."
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleApiKeySubmit}
-                      disabled={!apiKeyInput.trim()}
-                      className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
-                    >
-                      설정
-                    </button>
-                  </div>
-                  <button
-                    onClick={() =>
-                      window.electronAPI?.openExternal(
-                        "https://console.anthropic.com/settings/keys"
-                      )
-                    }
-                    className="mt-1 text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-                  >
-                    API 키 발급받기
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </>
+      {/* Claude row */}
+      <div className="flex items-center gap-1.5 mb-1">
+        <span
+          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+            claudeConnected ? "bg-accent-green" : "bg-gray-600"
+          }`}
+        />
+        <span className="text-[11px] text-gray-300 flex-shrink-0">Claude</span>
+        {claudeConnected ? (
+          <>
+            <span className="text-[10px] text-gray-500 ml-auto">
+              {claudeMethod}
+            </span>
+            {hasStoredKeys.anthropic && !connectionDetail.claudeCli && (
+              <button
+                onClick={() => {
+                  send({ type: "apikey:set", apiKey: "" });
+                }}
+                className="text-[10px] text-gray-600 hover:text-gray-400 ml-1"
+                title="키 해제"
+              >
+                &times;
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center gap-1.5 ml-auto">
+            {!showClaudeInput ? (
+              <button
+                onClick={() => setShowClaudeInput(true)}
+                className="text-[10px] text-gray-500 hover:text-gray-300"
+              >
+                키 입력
+              </button>
+            ) : null}
+            <span className="text-gray-700">|</span>
+            <button
+              onClick={() =>
+                window.electronAPI?.openExternal(
+                  "https://console.anthropic.com/settings/keys"
+                )
+              }
+              className="text-[10px] text-accent-blue hover:text-accent-blue/80"
+            >
+              발급받기
+            </button>
+          </div>
+        )}
+      </div>
+      {showClaudeInput && !claudeConnected && (
+        <div className="flex gap-1 mb-1.5 ml-3">
+          <input
+            type="password"
+            value={anthropicInput}
+            onChange={(e) => setAnthropicInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const key = anthropicInput.trim();
+                if (key) {
+                  send({ type: "apikey:set", apiKey: key });
+                  setAnthropicInput("");
+                  setShowClaudeInput(false);
+                }
+              }
+            }}
+            className="flex-1 min-w-0 text-[11px] bg-panel-bg border border-panel-border rounded px-1.5 py-0.5 text-gray-300 focus:border-accent-blue focus:outline-none"
+            placeholder="sk-ant-..."
+            autoFocus
+          />
+          <button
+            onClick={() => {
+              const key = anthropicInput.trim();
+              if (key) {
+                send({ type: "apikey:set", apiKey: key });
+                setAnthropicInput("");
+                setShowClaudeInput(false);
+              }
+            }}
+            disabled={!anthropicInput.trim()}
+            className="px-1.5 py-0.5 text-[10px] bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
+          >
+            설정
+          </button>
+        </div>
       )}
 
-      {/* OpenAI / Codex auth */}
-      {provider === "codex" && (
-        <>
-          {codexConnected ? (
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
-                <span className="text-xs text-accent-green">Codex 연결됨</span>
-                <span className="ml-auto text-[10px] text-gray-600">
-                  {codexMethod}
-                </span>
-              </div>
-              {(openAiKeySet || connectionDetail.codexSdk) && !connectionDetail.codexCli && (
-                <div className="text-[10px] text-gray-500 mt-0.5">SDK 모드 (CLI 미설치)</div>
-              )}
-              {openAiKeySet && (
-                <button
-                  onClick={() => {
-                    setOpenAiKeySet(false);
-                    setOpenAiKeyInput("");
-                    send({ type: "openaikey:set", apiKey: "" });
-                  }}
-                  className="mt-1 text-[10px] text-gray-600 hover:text-gray-400"
-                >
-                  API 키 해제
-                </button>
-              )}
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className="w-2 h-2 rounded-full bg-accent-orange flex-shrink-0 animate-pulse-slow" />
-                <span className="text-xs text-accent-orange">Codex 연결 안됨</span>
-              </div>
-              <div className="text-[10px] text-gray-400 mb-1.5">
-                방법 1: 터미널에서 <code className="text-accent-blue bg-panel-bg px-1 rounded">codex</code> 설치
-              </div>
-              <div className="text-[10px] text-gray-400 mb-1">방법 2: OpenAI API 키 입력 (SDK 모드)</div>
-              {!showOpenAiKey ? (
-                <button
-                  onClick={() => setShowOpenAiKey(true)}
-                  className="text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-                >
-                  OpenAI API 키 입력하기
-                </button>
-              ) : (
-                <div className="mt-1">
-                  <div className="flex gap-1">
-                    <input
-                      type="password"
-                      value={openAiKeyInput}
-                      onChange={(e) => setOpenAiKeyInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleOpenAiKeySubmit()}
-                      className="flex-1 min-w-0 text-xs bg-panel-bg border border-panel-border rounded px-2 py-1 text-gray-300 focus:border-accent-blue focus:outline-none"
-                      placeholder="sk-..."
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleOpenAiKeySubmit}
-                      disabled={!openAiKeyInput.trim()}
-                      className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
-                    >
-                      설정
-                    </button>
-                  </div>
-                  <button
-                    onClick={() =>
-                      window.electronAPI?.openExternal(
-                        "https://platform.openai.com/api-keys"
-                      )
-                    }
-                    className="mt-1 text-[10px] text-accent-blue hover:text-accent-blue/80 underline underline-offset-2"
-                  >
-                    OpenAI API 키 발급받기
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </>
+      {/* Codex row */}
+      <div className="flex items-center gap-1.5 mb-1">
+        <span
+          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+            codexConnected ? "bg-accent-green" : "bg-gray-600"
+          }`}
+        />
+        <span className="text-[11px] text-gray-300 flex-shrink-0">Codex</span>
+        {codexConnected ? (
+          <>
+            <span className="text-[10px] text-gray-500 ml-auto">
+              {codexMethod}
+            </span>
+            {hasStoredKeys.openai && !connectionDetail.codexCli && (
+              <button
+                onClick={() => {
+                  send({ type: "openaikey:set", apiKey: "" });
+                }}
+                className="text-[10px] text-gray-600 hover:text-gray-400 ml-1"
+                title="키 해제"
+              >
+                &times;
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center gap-1.5 ml-auto">
+            {!showCodexInput ? (
+              <button
+                onClick={() => setShowCodexInput(true)}
+                className="text-[10px] text-gray-500 hover:text-gray-300"
+              >
+                키 입력
+              </button>
+            ) : null}
+            <span className="text-gray-700">|</span>
+            <button
+              onClick={() =>
+                window.electronAPI?.openExternal(
+                  "https://platform.openai.com/api-keys"
+                )
+              }
+              className="text-[10px] text-accent-blue hover:text-accent-blue/80"
+            >
+              발급받기
+            </button>
+          </div>
+        )}
+      </div>
+      {showCodexInput && !codexConnected && (
+        <div className="flex gap-1 mb-1.5 ml-3">
+          <input
+            type="password"
+            value={openaiInput}
+            onChange={(e) => setOpenaiInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const key = openaiInput.trim();
+                if (key) {
+                  send({ type: "openaikey:set", apiKey: key });
+                  setOpenaiInput("");
+                  setShowCodexInput(false);
+                }
+              }
+            }}
+            className="flex-1 min-w-0 text-[11px] bg-panel-bg border border-panel-border rounded px-1.5 py-0.5 text-gray-300 focus:border-accent-blue focus:outline-none"
+            placeholder="sk-..."
+            autoFocus
+          />
+          <button
+            onClick={() => {
+              const key = openaiInput.trim();
+              if (key) {
+                send({ type: "openaikey:set", apiKey: key });
+                setOpenaiInput("");
+                setShowCodexInput(false);
+              }
+            }}
+            disabled={!openaiInput.trim()}
+            className="px-1.5 py-0.5 text-[10px] bg-accent-blue text-white rounded hover:bg-accent-blue/80 disabled:opacity-30 flex-shrink-0"
+          >
+            설정
+          </button>
+        </div>
+      )}
+
+      {mockMode && (
+        <div className="mt-1">
+          <span className="text-[10px] bg-accent-orange/20 text-accent-orange px-1.5 py-0.5 rounded">
+            모의 모드
+          </span>
+        </div>
       )}
     </div>
   );

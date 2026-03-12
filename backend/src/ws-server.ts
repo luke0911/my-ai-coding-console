@@ -21,6 +21,7 @@ import {
 import { isCodexAvailable } from "./codex-client.js";
 import { dailyStats } from "./daily-stats.js";
 import { checkRateLimit } from "./rate-limit-checker.js";
+import { keyStore } from "./key-store.js";
 
 function isClaudeCliAvailable(): boolean {
   try {
@@ -106,6 +107,8 @@ export function setupWebSocketServer(server: Server): WebSocketServer {
         codexAvailable,
         claudeSdkAvailable,
         codexSdkAvailable,
+        hasStoredAnthropicKey: keyStore.hasAnthropicKey(),
+        hasStoredOpenAiKey: keyStore.hasOpenAiKey(),
       })
     );
 
@@ -218,11 +221,9 @@ async function handleClientMessage(
 
     case "apikey:set": {
       // API key is optional — Claude Max uses OAuth via CLI
-      if (msg.apiKey && msg.apiKey.trim()) {
-        process.env.ANTHROPIC_API_KEY = msg.apiKey.trim();
-        console.log("[WS] API 키 설정됨");
-      } else {
-        delete process.env.ANTHROPIC_API_KEY;
+      keyStore.setAnthropicKey(msg.apiKey?.trim() ?? "");
+      if (msg.apiKey?.trim()) {
+        console.log("[WS] API 키 설정됨 (영속화)");
       }
       const cliReady = isClaudeCliAvailable();
       const sdkReady = !!process.env.ANTHROPIC_API_KEY;
@@ -261,11 +262,9 @@ async function handleClientMessage(
     }
 
     case "openaikey:set": {
-      if (msg.apiKey && msg.apiKey.trim()) {
-        process.env.OPENAI_API_KEY = msg.apiKey.trim();
-        console.log("[WS] OpenAI API 키 설정됨");
-      } else {
-        delete process.env.OPENAI_API_KEY;
+      keyStore.setOpenAiKey(msg.apiKey?.trim() ?? "");
+      if (msg.apiKey?.trim()) {
+        console.log("[WS] OpenAI API 키 설정됨 (영속화)");
       }
       const openAiSdkReady = !!process.env.OPENAI_API_KEY;
       ws.send(

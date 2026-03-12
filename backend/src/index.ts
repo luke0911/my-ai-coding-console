@@ -12,6 +12,8 @@ import { execSync } from "child_process";
 import { createServer } from "http";
 import { setupWebSocketServer } from "./ws-server.js";
 import { createAnalysisRouter } from "./data-analysis-routes.js";
+// Restore persisted API keys before anything else uses process.env
+import "./key-store.js";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 
