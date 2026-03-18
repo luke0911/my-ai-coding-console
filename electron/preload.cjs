@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   selectDataFile: () => ipcRenderer.invoke("dialog:selectDataFile"),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
   // Backend management
+  getBackendPort: () => ipcRenderer.invoke("app:getBackendPort"),
   restartBackend: () => ipcRenderer.invoke("app:restartBackend"),
   // Claude auth
   openClaudeLogin: () => ipcRenderer.invoke("auth:openClaudeLogin"),

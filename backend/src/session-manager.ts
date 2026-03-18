@@ -9,6 +9,7 @@
 import { v4 as uuid } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
+import { homedir } from "os";
 import type {
   ServerEvent,
   SessionStage,
@@ -43,7 +44,7 @@ interface SessionState {
 
 const sessions = new Map<string, SessionState>();
 
-const DATA_DIR = path.join(process.cwd(), ".ai-console-data");
+const DATA_DIR = path.join(homedir(), ".ai-console-data");
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {

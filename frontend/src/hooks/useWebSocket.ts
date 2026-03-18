@@ -13,9 +13,15 @@ import { useSessionStore, createEmptySessionData } from "@/store/session-store";
 import { useAnalysisStore } from "@/store/analysis-store";
 import type { ClientMessage, ServerEvent } from "@my-ai-console/shared";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001/ws";
+const DEFAULT_BACKEND_PORT = 3001;
 const MAX_RECONNECT_DELAY = 10000;
 const BASE_RECONNECT_DELAY = 1000;
+
+function getBackendUrl(port: number, protocol: "ws" | "http") {
+  return protocol === "ws"
+    ? `ws://localhost:${port}/ws`
+    : `http://localhost:${port}/health`;
+}
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -23,6 +29,8 @@ export function useWebSocket() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disposedRef = useRef(false);
   const backendRestartAttemptedRef = useRef(false);
+  const backendPortRef = useRef(DEFAULT_BACKEND_PORT);
+  const portResolvedRef = useRef(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectCount, setReconnectCount] = useState(0);
 
@@ -512,7 +520,8 @@ export function useWebSocket() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setReconnecting(true);
-    const ws = new WebSocket(WS_URL);
+    const wsUrl = getBackendUrl(backendPortRef.current, "ws");
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -609,7 +618,8 @@ export function useWebSocket() {
     setReconnectCount(0);
 
     // Check if backend is reachable; if not, try to restart it via Electron IPC
-    fetch("http://localhost:3001/health", { signal: AbortSignal.timeout(2000) })
+    const healthUrl = getBackendUrl(backendPortRef.current, "http");
+    fetch(healthUrl, { signal: AbortSignal.timeout(2000) })
       .then((res) => {
         if (res.ok) {
           console.log("[WS] Backend is healthy, reconnecting WebSocket...");
@@ -638,7 +648,29 @@ export function useWebSocket() {
 
   useEffect(() => {
     disposedRef.current = false;
-    connect();
+
+    // Resolve backend port from Electron IPC (runtime), then connect
+    const init = async () => {
+      if (
+        !portResolvedRef.current &&
+        typeof window !== "undefined" &&
+        (window as any).electronAPI?.getBackendPort
+      ) {
+        try {
+          const port = await (window as any).electronAPI.getBackendPort();
+          if (typeof port === "number" && port > 0) {
+            backendPortRef.current = port;
+            console.log(`[WS] Backend port resolved via IPC: ${port}`);
+          }
+        } catch {
+          // Fall back to default port
+        }
+        portResolvedRef.current = true;
+      }
+      connect();
+    };
+
+    init();
     return () => {
       disposedRef.current = true;
       if (reconnectTimerRef.current) {

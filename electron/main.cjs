@@ -6,19 +6,106 @@
  * On window close, all child processes are cleaned up.
  */
 
-const { app, BrowserWindow, shell, dialog, ipcMain, session } = require("electron");
+const { app, BrowserWindow, shell, dialog, ipcMain, session, safeStorage } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
+const net = require("net");
+const fs = require("fs");
+const os = require("os");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const IS_WIN = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
 const IS_LINUX = process.platform === "linux";
-const BACKEND_PORT = 3001;
-const FRONTEND_PORT = 3000;
-const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
-const BACKEND_HEALTH = `http://localhost:${BACKEND_PORT}/health`;
+
+// Linux: disable GPU sandbox to avoid SUID issues on some distros
+if (IS_LINUX) {
+  app.commandLine.appendSwitch("no-sandbox");
+}
+
+let BACKEND_PORT = 3001;
+let FRONTEND_PORT = 3000;
+let FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
+let BACKEND_HEALTH = `http://localhost:${BACKEND_PORT}/health`;
+
+/** Check if a port is available */
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+/** Find an available port starting from the preferred one, skipping excluded ports */
+async function findAvailablePort(preferred, exclude = []) {
+  for (let port = preferred; port < preferred + 20; port++) {
+    if (exclude.includes(port)) continue;
+    if (await isPortAvailable(port)) return port;
+  }
+  throw new Error(`No available port found near ${preferred}`);
+}
+
+// ─── Encrypted key storage (safeStorage) ────────────────────────
+
+const DATA_DIR = path.join(os.homedir(), ".ai-console-data");
+const KEYS_ENC_FILE = path.join(DATA_DIR, "keys.enc");
+const KEYS_JSON_FILE = path.join(DATA_DIR, "keys.json"); // legacy plaintext
+
+/** Load API keys from encrypted storage, migrating from plaintext if needed */
+function loadStoredKeys() {
+  try {
+    // Try encrypted file first
+    if (fs.existsSync(KEYS_ENC_FILE)) {
+      const buf = fs.readFileSync(KEYS_ENC_FILE);
+      if (safeStorage.isEncryptionAvailable()) {
+        const decrypted = safeStorage.decryptString(buf);
+        console.log("[keys] Loaded keys from encrypted storage");
+        return JSON.parse(decrypted);
+      }
+      console.warn("[keys] Encryption not available, cannot read encrypted file");
+    }
+
+    // Migrate from legacy plaintext keys.json
+    if (fs.existsSync(KEYS_JSON_FILE)) {
+      const raw = fs.readFileSync(KEYS_JSON_FILE, "utf-8");
+      const keys = JSON.parse(raw);
+      console.log("[keys] Migrating plaintext keys to encrypted storage");
+      saveStoredKeys(keys);
+      // Remove the plaintext file after successful migration
+      try { fs.unlinkSync(KEYS_JSON_FILE); } catch { /* ignore */ }
+      console.log("[keys] Migration complete, plaintext file removed");
+      return keys;
+    }
+  } catch (err) {
+    console.error("[keys] Failed to load keys:", err);
+  }
+  return {};
+}
+
+/** Save API keys to encrypted storage */
+function saveStoredKeys(keys) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+    }
+    if (safeStorage.isEncryptionAvailable()) {
+      const encrypted = safeStorage.encryptString(JSON.stringify(keys));
+      fs.writeFileSync(KEYS_ENC_FILE, encrypted, { mode: 0o600 });
+      console.log("[keys] Saved keys to encrypted storage");
+    } else {
+      // Fallback: restricted-permission plain JSON (Linux without keyring)
+      console.warn("[keys] Encryption not available, saving with file permissions only");
+      fs.writeFileSync(KEYS_ENC_FILE, JSON.stringify(keys, null, 2), { mode: 0o600 });
+    }
+  } catch (err) {
+    console.error("[keys] Failed to save keys:", err);
+  }
+}
 
 let mainWindow = null;
 let backendProcess = null;
@@ -29,10 +116,23 @@ let authPopup = null;
 
 function startBackend() {
   return new Promise((resolve) => {
+    // Load encrypted keys and pass as env vars
+    const storedKeys = loadStoredKeys();
+    const env = { ...process.env, PORT: String(BACKEND_PORT) };
+    if (storedKeys.anthropicApiKey) env.ANTHROPIC_API_KEY = storedKeys.anthropicApiKey;
+    if (storedKeys.openaiApiKey) env.OPENAI_API_KEY = storedKeys.openaiApiKey;
+
     backendProcess = spawn("node", ["dist/index.js"], {
       cwd: path.join(ROOT_DIR, "backend"),
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PORT: String(BACKEND_PORT) },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      env,
+    });
+
+    // Handle IPC messages from backend (key persistence requests)
+    backendProcess.on("message", (msg) => {
+      if (msg && msg.type === "save-keys") {
+        saveStoredKeys(msg.keys);
+      }
     });
 
     backendProcess.stdout.on("data", (data) => {
@@ -59,8 +159,9 @@ function startBackend() {
 
 function startFrontend() {
   return new Promise((resolve) => {
-    const nextBin = path.join(ROOT_DIR, "node_modules", ".bin", IS_WIN ? "next.cmd" : "next");
-    frontendProcess = spawn(nextBin, ["start", "--port", String(FRONTEND_PORT)], {
+    // Use node to run next CLI directly — avoids symlink issues in packaged apps
+    const nextCli = path.join(ROOT_DIR, "node_modules", "next", "dist", "bin", "next");
+    frontendProcess = spawn("node", [nextCli, "start", "--port", String(FRONTEND_PORT)], {
       cwd: path.join(ROOT_DIR, "frontend"),
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
@@ -183,6 +284,8 @@ function killChildren() {
 // ─── App lifecycle ──────────────────────────────────────────────
 
 // ─── IPC handlers ───────────────────────────────────────────────
+
+ipcMain.handle("app:getBackendPort", () => BACKEND_PORT);
 
 ipcMain.handle("dialog:selectFolder", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -346,6 +449,20 @@ app.on("ready", async () => {
   // Show window immediately with loading screen
   createWindow();
   mainWindow.loadFile(path.join(__dirname, "loading.html"));
+
+  // Find available ports before starting servers
+  try {
+    BACKEND_PORT = await findAvailablePort(3001);
+    FRONTEND_PORT = await findAvailablePort(3000, [BACKEND_PORT]);
+    FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
+    BACKEND_HEALTH = `http://localhost:${BACKEND_PORT}/health`;
+    console.log(`[app] Using ports — backend: ${BACKEND_PORT}, frontend: ${FRONTEND_PORT}`);
+  } catch (err) {
+    console.error("[app] Failed to find available ports:", err);
+    dialog.showErrorBox("Port Error", "Could not find available ports. Please close other applications using ports 3000-3020.");
+    app.quit();
+    return;
+  }
 
   // Start servers in parallel
   console.log("[app] Starting backend and frontend servers...");

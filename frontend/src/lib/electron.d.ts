@@ -8,6 +8,7 @@ interface ElectronAPI {
   selectDataFile: () => Promise<string | null>;
   openExternal: (url: string) => Promise<void>;
   // Backend management
+  getBackendPort: () => Promise<number>;
   restartBackend: () => Promise<{ success: boolean }>;
   // Claude auth
   openClaudeLogin: () => Promise<{ success: boolean; reason?: string }>;

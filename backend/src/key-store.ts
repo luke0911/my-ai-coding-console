@@ -1,12 +1,15 @@
 /**
- * Key store: persists API keys to disk so they survive app restarts.
+ * Key store: persists API keys securely.
  *
- * Keys are stored in `.ai-console-data/keys.json` with 0o600 permissions.
+ * When running under Electron, keys are sent to the main process via IPC
+ * for encrypted storage using the OS keychain (safeStorage).
+ * In development mode (no IPC), falls back to a plain JSON file.
+ *
  * On load, keys are restored into process.env.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import { homedir } from "os";
 
 const DATA_DIR = join(homedir(), ".ai-console-data");
@@ -19,24 +22,43 @@ interface StoredKeys {
 
 class KeyStore {
   private keys: StoredKeys = {};
+  private readonly useIpc: boolean;
 
   constructor() {
+    // If spawned by Electron with IPC channel, use IPC for persistence
+    this.useIpc = typeof process.send === "function";
+    if (this.useIpc) {
+      console.log("[KeyStore] Using Electron IPC for encrypted key storage");
+    }
     this.load();
   }
 
-  /** Load keys from disk and restore them into process.env */
+  /** Load keys from process.env (set by Electron) or fallback to disk */
   private load(): void {
     try {
-      if (existsSync(KEYS_FILE)) {
-        const raw = readFileSync(KEYS_FILE, "utf-8");
-        this.keys = JSON.parse(raw) as StoredKeys;
+      // Keys from process.env (injected by Electron main process from encrypted storage)
+      if (process.env.ANTHROPIC_API_KEY) {
+        this.keys.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+        console.log("[KeyStore] Loaded Anthropic API key from environment");
+      }
+      if (process.env.OPENAI_API_KEY) {
+        this.keys.openaiApiKey = process.env.OPENAI_API_KEY;
+        console.log("[KeyStore] Loaded OpenAI API key from environment");
+      }
 
-        if (this.keys.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
-          process.env.ANTHROPIC_API_KEY = this.keys.anthropicApiKey;
+      // Development fallback: read from plain JSON file
+      if (!this.useIpc && existsSync(KEYS_FILE)) {
+        const raw = readFileSync(KEYS_FILE, "utf-8");
+        const stored = JSON.parse(raw) as StoredKeys;
+
+        if (stored.anthropicApiKey && !this.keys.anthropicApiKey) {
+          this.keys.anthropicApiKey = stored.anthropicApiKey;
+          process.env.ANTHROPIC_API_KEY = stored.anthropicApiKey;
           console.log("[KeyStore] Restored Anthropic API key from disk");
         }
-        if (this.keys.openaiApiKey && !process.env.OPENAI_API_KEY) {
-          process.env.OPENAI_API_KEY = this.keys.openaiApiKey;
+        if (stored.openaiApiKey && !this.keys.openaiApiKey) {
+          this.keys.openaiApiKey = stored.openaiApiKey;
+          process.env.OPENAI_API_KEY = stored.openaiApiKey;
           console.log("[KeyStore] Restored OpenAI API key from disk");
         }
       }
@@ -45,8 +67,14 @@ class KeyStore {
     }
   }
 
-  /** Save current keys to disk */
+  /** Save keys: via IPC (Electron) or fallback to plain file (dev mode) */
   private save(): void {
+    if (this.useIpc) {
+      process.send!({ type: "save-keys", keys: this.keys });
+      return;
+    }
+
+    // Development fallback: plain JSON file
     try {
       if (!existsSync(DATA_DIR)) {
         mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });

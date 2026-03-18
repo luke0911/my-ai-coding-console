@@ -2,6 +2,11 @@
   "name": "my-ai-coding-console",
   "version": "1.0.0",
   "private": true,
+  "description": "AI Coding Console - Real-time AI agent activity visualizer",
+  "author": {
+    "name": "AI Coding Console",
+    "email": "dev@ai-coding-console.app"
+  },
   "workspaces": [
     "shared",
     "backend",
@@ -23,7 +28,7 @@
   },
   "build": {
     "appId": "com.ai-coding-console.app",
-    "productName": "AI 코딩 콘솔",
+    "productName": "AI Coding Console",
     "directories": {
       "output": "release"
     },
@@ -31,32 +36,67 @@
       "electron/**/*",
       "backend/dist/**/*",
       "backend/package.json",
-      "frontend/.next/**/*",
-      "frontend/public/**/*",
       "frontend/package.json",
       "shared/dist/**/*",
       "shared/package.json",
-      "node_modules/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "frontend/.next",
+        "to": "app/frontend/.next",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules",
+        "to": "app/node_modules",
+        "filter": [
+          "**/*",
+          "!**/*.map",
+          "!**/*.ts",
+          "!**/test/**",
+          "!**/tests/**",
+          "!**/__tests__/**",
+          "!**/docs/**",
+          "!**/example/**",
+          "!**/examples/**",
+          "!**/*.md",
+          "!**/CHANGELOG*",
+          "!**/LICENSE*",
+          "!**/.eslint*",
+          "!**/.prettier*"
+        ]
+      }
+    ],
+    "asar": false,
     "mac": {
       "target": ["dmg"],
       "icon": "electron/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "linux": {
       "target": ["AppImage", "deb"],
       "icon": "electron/icon.png",
       "category": "Development",
       "desktop": {
-        "Name": "AI 코딩 콘솔",
-        "Comment": "AI Coding Console",
-        "Terminal": "false"
+        "entry": {
+          "Name": "AI Coding Console",
+          "Comment": "AI Coding Console",
+          "Terminal": "false"
+        }
       }
     },
     "win": {
       "target": ["nsis"],
       "icon": "electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "AI 코딩 콘솔"
     }
   },
   "devDependencies": {
